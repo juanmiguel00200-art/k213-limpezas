@@ -6,13 +6,42 @@ const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 
 // Cria o cliente Supabase e expõe como `supabase` global para compatibilidade
 if (typeof window !== 'undefined') {
-  window.supabase = (typeof supabase !== 'undefined' && supabase.createClient) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+  // Se o SDK do supabase já estiver carregado no CDN, cria o cliente
+  if (typeof supabase !== 'undefined' && supabase.createClient) {
+    try {
+      window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      console.error('Falha ao criar supabase client:', e);
+      window.supabase = null;
+    }
+  } else {
+    // SDK não disponível ainda — setamos null e os logs abaixo ajudarão a diagnosticar
+    window.supabase = null;
+  }
 }
 
 // Flags e preços usados nas páginas
 const K213_CONFIGURED = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
+
+// Debug: log inicial para verificar carregamento / conexão
+if (typeof window !== 'undefined') {
+  try {
+    console.groupCollapsed('K213 debug');
+    console.log('app-common.js carregado');
+    console.log('K213_CONFIGURED:', K213_CONFIGURED);
+    console.log('SUPABASE_URL:', SUPABASE_URL);
+    // nao imprime a key inteira (mas imprime últimos 6 caracteres para ajudar a confirmar)
+    console.log('SUPABASE_ANON_KEY (suffix):', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.slice(-6) : null);
+    if (!window.supabase) {
+      console.warn('Supabase client NÃO disponível — verifique se o SDK foi carregado (cdn) antes deste arquivo.');
+    } else {
+      console.log('Supabase client criado com sucesso. Testando getUser e leitura de tabela...');
+    }
+    console.groupEnd();
+  } catch (e) { console.warn('Erro nos logs de debug iniciais:', e); }
+}
 
 // Utilitários
 function escapeHtml(str){
@@ -179,6 +208,26 @@ function attachTimers(requests){
     const el = document.getElementById(`upload-${r.id}`);
     // nada mais por enquanto; função existe para compatibilidade
   });
+}
+
+// Auto-teste de debug: se o client Supabase existe, tenta getUser e um select curto
+if (typeof window !== 'undefined' && window.supabase) {
+  (async () => {
+    try {
+      console.groupCollapsed('K213 Supabase self-check');
+      const userRes = await window.supabase.auth.getUser();
+      console.log('auth.getUser ->', userRes);
+      try {
+        const testRes = await window.supabase.from('cleaning_requests').select('id').limit(1);
+        console.log('test select cleaning_requests ->', testRes);
+      } catch (qErr) {
+        console.warn('Erro ao executar select de teste (pode ser RLS ou tabela ausente) ->', qErr);
+      }
+      console.groupEnd();
+    } catch (e) {
+      console.error('Erro no self-check do Supabase ->', e);
+    }
+  })();
 }
 
 // export globals para as páginas (algumas usam sem prefixo)
