@@ -57,11 +57,12 @@
 
 <script src="app-common.js"></script>
 <script>
-if (!K213_CONFIGURED) renderSetupWarning();
+// Proteção: verifica se a flag foi definida antes de usá-la para evitar ReferenceError
+if (typeof K213_CONFIGURED === 'undefined' || !K213_CONFIGURED) renderSetupWarning();
 
 // Se já está logado, manda direto pra tela certa
 (async function checkExisting(){
-  if (!K213_CONFIGURED) return;
+  if (typeof K213_CONFIGURED === 'undefined' || !K213_CONFIGURED) return;
   const ctx = await getSessionAndProfile();
   if (ctx) window.location.href = ctx.profile.role === 'profissional' ? 'profissional.html' : 'cliente.html';
 })();
