@@ -1,251 +1,247 @@
-// app-common.js — inicialização do Supabase e funções auxiliares para o app K213
-// Gerado/atualizado pelo Copilot conforme solicitado pelo mantenedor do projeto.
+/* ============================================================
+   K213 — núcleo compartilhado (config, auth, utilitários)
+   Carregado por todas as páginas via <script src="assets/app-common.js">
+   ============================================================ */
 
+/* ---------- CONFIGURAÇÃO SUPABASE — edite aqui ---------- */
 const SUPABASE_URL = 'https://oyxmrrazgjdnyzhyinhc.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 
-// Cria o cliente Supabase e expõe como `supabase` global para compatibilidade
-if (typeof window !== 'undefined') {
-  // Se o SDK do supabase já estiver carregado no CDN, cria o cliente
-  if (typeof supabase !== 'undefined' && supabase.createClient) {
-    try {
-      window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    } catch (e) {
-      console.error('Falha ao criar supabase client:', e);
-      window.supabase = null;
-    }
-  } else {
-    // SDK não disponível ainda — setamos null e os logs abaixo ajudarão a diagnosticar
-    window.supabase = null;
-  }
-}
-
-// Flags e preços usados nas páginas
-const K213_CONFIGURED = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
 
-// Debug: log inicial para verificar carregamento / conexão
-if (typeof window !== 'undefined') {
-  try {
-    console.groupCollapsed('K213 debug');
-    console.log('app-common.js carregado');
-    console.log('K213_CONFIGURED:', K213_CONFIGURED);
-    console.log('SUPABASE_URL:', SUPABASE_URL);
-    // nao imprime a key inteira (mas imprime últimos 6 caracteres para ajudar a confirmar)
-    console.log('SUPABASE_ANON_KEY (suffix):', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.slice(-6) : null);
-    if (!window.supabase) {
-      console.warn('Supabase client NÃO disponível — verifique se o SDK foi carregado (cdn) antes deste arquivo.');
-    } else {
-      console.log('Supabase client criado com sucesso. Testando getUser e leitura de tabela...');
-    }
-    console.groupEnd();
-  } catch (e) { console.warn('Erro nos logs de debug iniciais:', e); }
-}
+const K213_CONFIGURED = !(SUPABASE_URL.includes('SEU-PROJETO') || SUPABASE_ANON_KEY.includes('SUA_CHAVE'));
+const supabase = K213_CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-// Utilitários
-function escapeHtml(str){
-  if (str == null) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+let realtimeChannel = null;
 
-function formatDuration(seconds){
-  if (!seconds || isNaN(seconds)) return '0m';
-  seconds = Math.round(seconds);
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function formatDate(input){
-  if (!input) return '';
-  try{
-    const d = new Date(input);
-    if (isNaN(d)) return String(input);
-    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
-  } catch(e){ return String(input); }
-}
-
-function showSnackbar(text, timeout = 3000){
-  const el = document.getElementById('snackbar');
-  if (!el) return;
-  el.textContent = text;
-  el.classList.add('show');
-  clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => el.classList.remove('show'), timeout);
-}
-
-async function logout(){
-  try{
-    if (window.supabase) await window.supabase.auth.signOut();
-  } catch(e){ console.warn('Erro ao deslogar', e); }
-  window.location.href = 'index.html';
-}
-
+/* ---------- aviso de configuração pendente ---------- */
 function renderSetupWarning(){
-  alert('Arquivo app-common.js não está configurado corretamente. Verifique SUPABASE_URL e SUPABASE_ANON_KEY.');
+  document.body.innerHTML = `
+    <div class="setup-warning">
+      <h2>⚠️ Configuração pendente</h2>
+      <p>Este app ainda não está ligado a um projeto Supabase.</p>
+      <p>Abra <code>assets/app-common.js</code>, encontre <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code> no topo do arquivo, e substitua pelos valores do seu projeto (Settings → API no painel do Supabase).</p>
+      <p>Consulte <strong>LEIA-ME-SETUP.md</strong> para o passo a passo completo.</p>
+    </div>`;
 }
 
-// Sessão e perfil
-async function getSessionAndProfile(){
-  if (!window.supabase) return null;
-  try{
-    const { data: { user } } = await window.supabase.auth.getUser();
-    if (!user) return null;
-    const { data: profile, error } = await window.supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-    if (error) return null;
-    return { user, profile };
-  } catch(e){ console.error(e); return null; }
-}
-
+/* ---------- perfil ---------- */
 async function ensureProfile(user){
-  // cria perfil quando necessário (usado no registro)
-  if (!window.supabase) throw new Error('Supabase não configurado');
-  const { data: existing } = await window.supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
-  if (existing) return existing;
-  const pending = localStorage.getItem('k213_pending_profile');
-  const payload = pending ? JSON.parse(pending) : { name: user.email.split('@')[0], role: 'cliente' };
-  const insert = { id: user.id, name: payload.name, role: payload.role, email: user.email, created_at: new Date().toISOString() };
-  const { data, error } = await window.supabase.from('profiles').insert(insert).select().maybeSingle();
-  if (error) throw error;
+  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  if (profile) return profile;
+
+  let pending = JSON.parse(localStorage.getItem('k213_pending_profile') || 'null');
+  if (!pending) {
+    const name = prompt('Complete seu cadastro — qual é o seu nome?') || user.email;
+    const role = confirm('Você é o(a) profissional de limpeza?\n\nOK = Profissional   |   Cancelar = Cliente') ? 'profissional' : 'cliente';
+    pending = { name, role };
+  }
+  const { data: newProfile, error } = await supabase.from('profiles')
+    .insert({ id: user.id, name: pending.name, role: pending.role })
+    .select().single();
   localStorage.removeItem('k213_pending_profile');
-  return data;
+  if (error) { console.error(error); return { id: user.id, name: user.email, role: 'cliente' }; }
+  return newProfile;
 }
 
-async function requireRole(role){
+async function getSessionAndProfile(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const profile = await ensureProfile(session.user);
+  return { user: session.user, profile };
+}
+
+/* ---------- guarda de rota ----------
+   Chame no topo de cliente.html / profissional.html / relatorios.html.
+   Se não estiver logado -> manda para index.html.
+   Se o papel não bater -> manda para a página certa dele (não deixa
+   cliente ver tela de profissional nem vice-versa). */
+async function requireRole(requiredRole){
+  if (!K213_CONFIGURED) { renderSetupWarning(); return null; }
   const ctx = await getSessionAndProfile();
   if (!ctx) { window.location.href = 'index.html'; return null; }
-  if (!ctx.profile) { // tenta garantir profile
-    try{ ctx.profile = await ensureProfile(ctx.user); }catch(e){}
+  if (ctx.profile.role !== requiredRole) {
+    window.location.href = ctx.profile.role === 'profissional' ? 'profissional.html' : 'cliente.html';
+    return null;
   }
-  if (role === 'profissional' && ctx.profile && ctx.profile.role !== 'profissional') { window.location.href = 'cliente.html'; return null; }
-  if (role === 'cliente' && ctx.profile && ctx.profile.role !== 'cliente') { window.location.href = 'profissional.html'; return null; }
-  // atualiza nome no topo se houver
-  const top = document.getElementById('topWhoName');
-  if (top && ctx.profile) top.textContent = ctx.profile.name || '';
+  paintWho(ctx.profile);
   return ctx;
 }
 
-// Realtime helper (limpo: evita múltiplas subscrições)
-function startRealtime(cb){
-  if (!window.supabase) return;
-  if (window._k213_realtime) {
-    window._k213_realtime.unsubscribe();
-  }
-  const channel = window.supabase.channel('public:cleaning_requests')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'cleaning_requests' }, payload => {
-      try{ cb(payload); } catch(e){ console.error(e); }
-    })
+function paintWho(profile){
+  const nameEl = document.getElementById('topWhoName');
+  if (nameEl) nameEl.textContent = profile.name + ' · ' + (profile.role === 'profissional' ? 'Profissional' : 'Cliente');
+}
+
+async function logout(){
+  if (realtimeChannel && supabase) { supabase.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (supabase) await supabase.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+/* ---------- sincronização em tempo real ----------
+   onChange(payload) é chamado a cada INSERT/UPDATE/DELETE em
+   cleaning_requests. Cada página decide o que recarregar. */
+function startRealtime(onChange){
+  if (realtimeChannel || !supabase) return;
+  realtimeChannel = supabase
+    .channel('cleaning_requests_sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'cleaning_requests' }, onChange)
     .subscribe();
-  window._k213_realtime = channel;
-  return channel;
 }
 
-// Default checklist fetch
-async function getDefaultChecklist(){
-  if (!window.supabase) return [];
-  try{
-    const { data, error } = await window.supabase.from('default_checklist').select('items').eq('id', 1).maybeSingle();
-    if (error || !data) return [
-      { id: 'bed', label: 'Arrumar camas' },
-      { id: 'bath', label: 'Limpar banheiro' },
-      { id: 'vacuum', label: 'Aspirar' },
-      { id: 'laundry', label: 'Lavagem de roupa (se contratada)' }
-    ];
-    return data.items || [];
-  } catch(e){ console.error(e); return []; }
-}
-
-// Render simplificado de um cartão de tarefa — suficiente para as páginas já existentes
-function renderTaskCard(req, role){
-  const statusLabel = req.status || '';
-  const ref = req.ref_code ? escapeHtml(req.ref_code) : '';
-  const addr = escapeHtml(req.address || '');
-  const price = (req.price != null) ? Number(req.price).toFixed(2) + ' CHF' : (PRICE_BASE + ' CHF');
-  const client = escapeHtml(req.client_name || '');
-  const date = formatDate(req.date || req.created_at || req.completed_at);
-
-  // botões contextuais
-  let actions = '';
-  if (role === 'cleaner' || role === 'profissional'){
-    actions += req.status !== 'in-progress' ? `<button class="btn" onclick="startTimer(${req.id})">Iniciar</button>` : `<button class="btn" onclick="stopTimer(${req.id})">Parar</button>`;
-    actions += ` <button class="btn" onclick="completeTask(${req.id})">Concluir</button>`;
-  } else if (role === 'client'){
-    actions += `<button class="btn" onclick="editRequest(${req.id})">Editar</button> <button class="btn btn-danger" onclick="cancelRequest(${req.id})">Cancelar</button>`;
+/* ---------- snackbar ---------- */
+function showSnackbar(msg){
+  let el = document.getElementById('snackbar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'snackbar';
+    el.className = 'snackbar';
+    document.body.appendChild(el);
   }
-
-  // upload input (hidden) — a página chama uploadPhotos(id, input)
-  const photosInput = `<input type="file" accept="image/*" multiple style="display:none;" id="upload-${req.id}" onchange="uploadPhotos(${req.id}, this)" />`;
-
-  return `
-    <div class="task ${escapeHtml(statusLabel)}">
-      <div class="task-top">
-        <div><div class="task-ref">${ref}</div><div class="task-addr">${addr}</div></div>
-        <div class="task-badges">
-          <span class="badge price">${price}</span>
-          <span style="font-family:var(--mono); font-size:12px; color:var(--muted);">${date}</span>
-        </div>
-      </div>
-      <div class="task-notes">Cliente: ${client} · Hóspedes: ${req.guest_count || '-'} · Estadia: ${req.stay_duration || '-'} dias ${req.laundry_service ? '· 🧺 com lavagem' : ''}</div>
-      <div class="task-actions">${actions} ${photosInput}</div>
-    </div>
-  `;
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
 }
 
-// attachTimers pode ser uma função leve que garante que não ocorram erros quando chamada
-function attachTimers(requests){
-  // para evitar erros: apenas garante que inputs de upload existam ao renderizar
-  if (!Array.isArray(requests)) return;
-  requests.forEach(r => {
-    const el = document.getElementById(`upload-${r.id}`);
-    // nada mais por enquanto; função existe para compatibilidade
+/* ---------- utilitários de formatação ---------- */
+function formatDate(dateString){
+  if (!dateString) return '';
+  const d = new Date(dateString + 'T00:00:00');
+  return d.toLocaleDateString('pt-BR');
+}
+function getElapsedTime(startIso){
+  const elapsed = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
+  return formatDuration(elapsed);
+}
+function formatDuration(totalSeconds){
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return h > 0 ? `${h}h ${m}min ${s}s` : `${m}min ${s}s`;
+}
+function escapeHtml(str){
+  if (str == null) return '';
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- checklist padrão ---------- */
+async function getDefaultChecklist(){
+  const { data, error } = await supabase.from('default_checklist').select('items').eq('id', 1).single();
+  if (error || !data) return [];
+  return data.items;
+}
+
+/* ---------- cronômetros ativos na tela ----------
+   Reinicia os intervalos toda vez que a lista é redesenhada,
+   sem duplicar contadores para o mesmo work_start. */
+const _activeTimerKeys = new Set();
+function attachTimers(list){
+  list.forEach(req => {
+    if (req.status === 'in-progress' && req.work_start) {
+      const start = req.work_start;
+      const key = 'timer_' + req.id + '_' + start;
+      if (_activeTimerKeys.has(key)) return;
+      _activeTimerKeys.add(key);
+      setInterval(() => {
+        document.querySelectorAll(`[data-timer-start="${start}"]`).forEach(el => {
+          el.textContent = getElapsedTime(start);
+        });
+      }, 1000);
+    }
   });
 }
 
-// Auto-teste de debug: se o client Supabase existe, tenta getUser e um select curto
-if (typeof window !== 'undefined' && window.supabase) {
-  (async () => {
-    try {
-      console.groupCollapsed('K213 Supabase self-check');
-      const userRes = await window.supabase.auth.getUser();
-      console.log('auth.getUser ->', userRes);
-      try {
-        const testRes = await window.supabase.from('cleaning_requests').select('id').limit(1);
-        console.log('test select cleaning_requests ->', testRes);
-      } catch (qErr) {
-        console.warn('Erro ao executar select de teste (pode ser RLS ou tabela ausente) ->', qErr);
-      }
-      console.groupEnd();
-    } catch (e) {
-      console.error('Erro no self-check do Supabase ->', e);
-    }
-  })();
-}
+/* ---------- cartão de tarefa (compartilhado entre cliente/profissional) ---------- */
+function renderTaskCard(req, mode){
+  // mode: 'client' (somente leitura, sem checklist) | 'cleaner' (controla tudo)
+  let timerHtml = '';
+  if (req.status === 'in-progress' && req.work_start) {
+    timerHtml = `<div class="timer-box">
+      <div class="timer-display" data-timer-start="${req.work_start}">${getElapsedTime(req.work_start)}</div>
+      ${mode === 'cleaner'
+        ? `<div class="timer-controls"><button class="btn btn-danger btn-lg" onclick="stopTimer('${req.id}')">⏹ Finalizar trabalho</button></div>`
+        : `<p style="font-size:12.5px; color:var(--info); margin-top:8px;">Trabalho em andamento…</p>`}
+    </div>`;
+  } else if (req.status === 'pending' && mode === 'cleaner') {
+    timerHtml = `<div class="timer-box">
+      <p style="font-size:12.5px; color:var(--muted); margin-bottom:12px;">Aguardando início do trabalho</p>
+      <div class="timer-controls"><button class="btn btn-success btn-lg" onclick="startTimer('${req.id}')">▶ Iniciar trabalho</button></div>
+    </div>`;
+  } else if (req.work_end && req.work_start) {
+    const duration = (new Date(req.work_end) - new Date(req.work_start)) / 1000;
+    timerHtml = `<p style="color:var(--success); margin-top:10px; font-size:13px; font-weight:600;">⏱️ Tempo total: ${formatDuration(duration)}</p>`;
+  }
 
-// export globals para as páginas (algumas usam sem prefixo)
-if (typeof window !== 'undefined'){
-  window.K213_CONFIGURED = K213_CONFIGURED;
-  window.PRICE_BASE = PRICE_BASE;
-  window.PRICE_WITH_LAUNDRY = PRICE_WITH_LAUNDRY;
-  window.escapeHtml = escapeHtml;
-  window.formatDuration = formatDuration;
-  window.formatDate = formatDate;
-  window.showSnackbar = showSnackbar;
-  window.logout = logout;
-  window.renderSetupWarning = renderSetupWarning;
-  window.getSessionAndProfile = getSessionAndProfile;
-  window.ensureProfile = ensureProfile;
-  window.requireRole = requireRole;
-  window.startRealtime = startRealtime;
-  window.getDefaultChecklist = getDefaultChecklist;
-  window.renderTaskCard = renderTaskCard;
-  window.attachTimers = attachTimers;
+  let photosHtml = '';
+  if (req.photos && req.photos.length) {
+    photosHtml = `<div class="photo-row">${req.photos.map(p => `<img src="${p}" alt="foto" onclick="window.open('${p}','_blank')">`).join('')}</div>`;
+  }
+
+  let checklistHtml = '';
+  if (mode === 'cleaner') {
+    const total = (req.checklist || []).length;
+    const done = (req.checklist || []).filter(i => i.done).length;
+    checklistHtml = total ? `
+      <div class="checklist">
+        <h4>Checklist</h4>
+        <div class="checklist-progress">${done} / ${total} concluídos</div>
+        ${req.checklist.map(item => {
+          const isLaundry = item.id === 'laundry' || item.label.includes('Lavagem de roupa');
+          return `<div class="checklist-item ${isLaundry ? 'laundry-item' : ''} ${item.done ? 'done' : ''}">
+            <input type="checkbox" id="ck_${item.id}_${req.id}" ${item.done ? 'checked' : ''} onchange="toggleChecklistItem('${req.id}', '${item.id}')">
+            <label for="ck_${item.id}_${req.id}">${escapeHtml(item.label)}</label>
+            ${isLaundry ? '<span class="plus">+10 CHF</span>' : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="field">
+        <label>Fotos (opcional)</label>
+        <input type="file" accept="image/*" multiple onchange="uploadPhotos('${req.id}', this)">
+      </div>
+      ${photosHtml}
+    ` : '';
+  }
+
+  let actionsHtml = '';
+  if (mode === 'client' && req.status === 'pending') {
+    actionsHtml = `<div class="task-actions">
+      <button class="btn btn-outline" onclick="editRequest('${req.id}')">Editar</button>
+      <button class="btn btn-danger" onclick="cancelRequest('${req.id}')">Cancelar</button>
+    </div>`;
+  }
+  if (mode === 'cleaner' && req.status !== 'completed') {
+    actionsHtml += `<div class="task-actions"><button class="btn btn-success" onclick="completeTask('${req.id}')">✅ Marcar como concluída</button></div>`;
+  }
+
+  const statusLabel = req.status === 'pending' ? 'Pendente' : req.status === 'in-progress' ? 'Em andamento' : 'Concluída';
+
+  return `
+  <div class="task ${req.status}">
+    <div class="task-top">
+      <div>
+        <div class="task-ref">${req.ref_code || ''}</div>
+        <div class="task-addr">${escapeHtml(req.address)}</div>
+      </div>
+      <div class="task-badges">
+        <span class="badge price ${req.laundry_service ? 'laundry' : ''}">${req.price} CHF</span>
+        <span class="badge ${req.status}">${statusLabel}</span>
+      </div>
+    </div>
+    <div class="task-info">
+      <div class="info-item"><div class="label">Data</div><div class="value">${formatDate(req.date)}</div></div>
+      <div class="info-item"><div class="label">Horário</div><div class="value">${req.time ? req.time.slice(0,5) : ''}</div></div>
+      <div class="info-item"><div class="label">Estadia</div><div class="value">${req.stay_duration} dias</div></div>
+      <div class="info-item"><div class="label">Hóspedes</div><div class="value">${req.guest_count}</div></div>
+      <div class="info-item"><div class="label">Lavagem</div><div class="value">${req.laundry_service ? '✅ Sim' : '❌ Não'}</div></div>
+      ${mode === 'cleaner' ? `<div class="info-item"><div class="label">Cliente</div><div class="value">${escapeHtml(req.client_name)}</div></div>` : ''}
+    </div>
+    ${req.notes ? `<div class="task-notes"><strong>Obs:</strong> ${escapeHtml(req.notes)}</div>` : ''}
+    ${timerHtml}
+    ${checklistHtml}
+    ${mode === 'client' ? photosHtml : ''}
+    ${actionsHtml}
+  </div>`;
 }
