@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>K213 · Painel do Cliente</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<div id="snackbar" class="snackbar"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"></div>
+    <div><div class="name">K213</div><div class="sub">PAINEL DO CLIENTE</div></div>
+  </div>
+  <div class="who">
+    <span class="sync-dot"><span class="dot"></span>SINCRONIZADO</span>
+    <span id="topWhoName"></span>
+    <button class="btn btn-ghost" onclick="logout()">Sair</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="page-hero">
+    <div class="eyebrow">KÖNIZSTRASSE 213 · LIEBEFELD</div>
+    <h1>Suas requisições de limpeza</h1>
+    <p class="lede">Crie uma nova requisição e acompanhe o status em tempo real.</p>
+  </div>
+
+  <div class="card">
+    <div class="section-label">Nova requisição</div>
+    <form id="cleaningRequestForm">
+      <div class="field-row">
+        <div class="field"><label>Data</label><input type="date" id="cleaningDate" required /></div>
+        <div class="field"><label>Horário</label><input type="time" id="cleaningTime" required /></div>
+      </div>
+      <div class="field"><label>Endereço</label><input type="text" id="propertyAddress" placeholder="Könizstrasse 213, Liebefeld" required /></div>
+      <div class="field-row">
+        <div class="field"><label>Duração da estadia (dias)</label><input type="number" id="stayDuration" min="1" required /></div>
+        <div class="field"><label>Nº de hóspedes</label><input type="number" id="guestCount" min="1" required /></div>
+      </div>
+      <div class="field price-field">
+        <div class="laundry-check">
+          <input type="checkbox" id="laundryService" onchange="updatePrice()" />
+          <label for="laundryService">🧺 Lavagem de roupa (opcional)</label>
+        </div>
+        <div class="price-box">
+          <div class="base">Base 40 CHF · com lavagem 50 CHF</div>
+          <div class="total"><span id="priceDisplay">40</span> <span class="chf">CHF</span></div>
+        </div>
+      </div>
+      <div class="field"><label>Observações</label><textarea id="specialNotes" rows="3" placeholder="Opcional"></textarea></div>
+      <button type="submit" class="btn btn-accent">Criar requisição</button>
+    </form>
+  </div>
+
+  <div class="section-label">Minhas requisições</div>
+  <div class="filter-bar">
+    <span class="flabel">Status</span>
+    <select id="clientFilterStatus">
+      <option value="all">Todos</option>
+      <option value="pending">Pendentes</option>
+      <option value="in-progress">Em andamento</option>
+      <option value="completed">Concluídas</option>
+    </select>
+  </div>
+  <div id="clientRequests"></div>
+</div>
+
+<script src="assets/app-common.js"></script>
+<script>
+let currentUser = null;
+let currentProfile = null;
+
+(async function init(){
+  const ctx = await requireRole('cliente');
+  if (!ctx) return; // requireRole já redireciona se necessário
+  currentUser = ctx.user;
+  currentProfile = ctx.profile;
+
+  document.getElementById('cleaningRequestForm').addEventListener('submit', createCleaningRequest);
+  document.getElementById('clientFilterStatus').addEventListener('change', loadClientRequests);
+
+  updatePrice();
+  loadClientRequests();
+  startRealtime((payload) => {
+    if (payload.new && payload.new.client_id === currentUser.id) loadClientRequests();
+    else if (payload.old && payload.old.client_id === currentUser.id) loadClientRequests();
+  });
+})();
+
+function updatePrice(){
+  const el = document.getElementById('laundryService');
+  document.getElementById('priceDisplay').textContent = el.checked ? PRICE_WITH_LAUNDRY : PRICE_BASE;
+}
+
+async function createCleaningRequest(event){
+  event.preventDefault();
+  const laundry = document.getElementById('laundryService').checked;
+  const price = laundry ? PRICE_WITH_LAUNDRY : PRICE_BASE;
+
+  const checklistItems = await getDefaultChecklist();
+  const checklist = checklistItems.map(item => ({ ...item, done: false }));
+
+  const payload = {
+    client_id: currentUser.id,
+    client_name: currentProfile.name,
+    client_email: currentUser.email,
+    address: document.getElementById('propertyAddress').value || 'Könizstrasse 213, Liebefeld',
+    date: document.getElementById('cleaningDate').value,
+    time: document.getElementById('cleaningTime').value,
+    stay_duration: parseInt(document.getElementById('stayDuration').value),
+    guest_count: parseInt(document.getElementById('guestCount').value),
+    notes: document.getElementById('specialNotes').value,
+    laundry_service: laundry,
+    price,
+    checklist
+  };
+
+  const { error } = await supabase.from('cleaning_requests').insert(payload);
+  if (error) return alert('Erro ao criar requisição: ' + error.message);
+
+  document.getElementById('cleaningRequestForm').reset();
+  document.getElementById('laundryService').checked = false;
+  updatePrice();
+  showSnackbar('✅ Requisição criada! Valor: ' + price + ' CHF');
+  loadClientRequests();
+}
+
+async function loadClientRequests(){
+  const container = document.getElementById('clientRequests');
+  container.innerHTML = '<div class="spinner"></div>';
+
+  const filter = document.getElementById('clientFilterStatus').value;
+  let query = supabase.from('cleaning_requests').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
+  if (filter !== 'all') query = query.eq('status', filter);
+
+  const { data: requests, error } = await query;
+  if (error) { container.innerHTML = '<div class="empty">Erro ao carregar: ' + error.message + '</div>'; return; }
+  if (!requests.length) { container.innerHTML = '<div class="empty">Nenhuma requisição encontrada.</div>'; return; }
+
+  container.innerHTML = requests.map(req => renderTaskCard(req, 'client')).join('');
+  attachTimers(requests);
+}
+
+function editRequest(id){
+  const newDate = prompt('Nova data (YYYY-MM-DD):');
+  if (!newDate) return;
+  const newTime = prompt('Novo horário (HH:MM):');
+  if (!newTime) return;
+  supabase.from('cleaning_requests').update({ date: newDate, time: newTime }).eq('id', id)
+    .then(({ error }) => {
+      if (error) return alert('Erro: ' + error.message);
+      showSnackbar('✅ Requisição atualizada!');
+      loadClientRequests();
+    });
+}
+
+function cancelRequest(id){
+  if (!confirm('Tem certeza que deseja cancelar esta requisição?')) return;
+  supabase.from('cleaning_requests').delete().eq('id', id).then(({ error }) => {
+    if (error) return alert('Erro: ' + error.message);
+    showSnackbar('🗑️ Requisição cancelada.');
+    loadClientRequests();
+  });
+}
+</script>
+</body>
+</html>
