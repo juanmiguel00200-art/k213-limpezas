@@ -54,15 +54,22 @@ async function loadReports(){
   const grid = document.getElementById('statsGrid');
   const history = document.getElementById('historyList');
 
-  const { data: completed, error } = await supabase.from('cleaning_requests').select('*').eq('status', 'completed').order('completed_at', { ascending: false });
-  if (error) { history.innerHTML = '<div class="empty">Erro ao carregar: ' + error.message + '</div>'; return; }
+  // safe default for PRICE_BASE if not defined
+  const basePrice = (typeof PRICE_BASE !== 'undefined') ? PRICE_BASE : 0;
 
-  const total = completed.length;
+  const { data: completed, error } = await supabase
+    .from('cleaning_requests')
+    .select('*')
+    .eq('status', 'completed')
+    .order('completed_at', { ascending: false });
+  if (error) { history.innerHTML = '<div class="empty">Erro ao carregar: ' + escapeHtml(error.message) + '</div>'; return; }
+
+  const total = (completed || []).length;
   let totalTime = 0, totalRevenue = 0, laundryCount = 0;
-  completed.forEach(r => {
-    if (r.work_start && r.work_end) totalTime += (new Date(r.work_end) - new Date(r.work_start)) / 1000;
-    totalRevenue += Number(r.price || PRICE_BASE);
-    if (r.laundry_service) laundryCount++;
+  (completed || []).forEach(r => {
+    if (r && r.work_start && r.work_end) totalTime += (new Date(r.work_end) - new Date(r.work_start)) / 1000;
+    totalRevenue += Number((r && r.price) != null ? r.price : basePrice) || 0;
+    if (r && r.laundry_service) laundryCount++;
   });
   const avgTime = total > 0 ? totalTime / total : 0;
 
@@ -70,25 +77,42 @@ async function loadReports(){
     <div class="stat"><div class="n">${total}</div><div class="l">Limpezas concluídas</div></div>
     <div class="stat"><div class="n">${formatDuration(totalTime)}</div><div class="l">Tempo total</div></div>
     <div class="stat"><div class="n">${formatDuration(avgTime)}</div><div class="l">Média por limpeza</div></div>
-    <div class="stat"><div class="n">${totalRevenue}</div><div class="l">Faturamento (CHF)</div></div>
+    <div class="stat"><div class="n">${Number(totalRevenue).toFixed(2)}</div><div class="l">Faturamento (CHF)</div></div>
     <div class="stat"><div class="n">${laundryCount}</div><div class="l">Com lavagem</div></div>
   `;
 
-  if (!completed.length) { history.innerHTML = '<div class="empty">Nenhuma limpeza concluída ainda.</div>'; return; }
+  if (!completed || !completed.length) { history.innerHTML = '<div class="empty">Nenhuma limpeza concluída ainda.</div>'; return; }
 
-  history.innerHTML = completed.map(r => `
-    <div class="task completed">
-      <div class="task-top">
-        <div><div class="task-ref">${r.ref_code || ''}</div><div class="task-addr">${escapeHtml(r.address)}</div></div>
-        <div class="task-badges">
-          <span class="badge price ${r.laundry_service ? 'laundry' : ''}">${r.price} CHF</span>
-          <span style="font-family:var(--mono); font-size:12px; color:var(--muted);">${formatDate(r.date)}</span>
+  history.innerHTML = (completed || []).map(r => {
+    const price = Number((r && r.price) != null ? r.price : basePrice).toFixed(2) + ' CHF';
+    const dateStr = formatDate(r && (r.completed_at || r.date));
+    const addr = escapeHtml(r && r.address ? r.address : '');
+    const client = escapeHtml(r && r.client_name ? r.client_name : '');
+    const guestCount = (r && r.guest_count) != null ? r.guest_count : '-';
+    const stay = (r && r.stay_duration) != null ? r.stay_duration : '-';
+    const laundryLabel = r && r.laundry_service ? '· 🧺 com lavagem' : '';
+    let timeLine = '';
+    if (r && r.work_start && r.work_end) {
+      const durSec = (new Date(r.work_end) - new Date(r.work_start)) / 1000;
+      timeLine = `<div style="color:var(--success); margin-top:8px; font-size:13px; font-weight:600;">⏱️ Tempo: ${formatDuration(durSec)} — ${formatDate(r.work_start)} → ${formatDate(r.work_end)}</div>`;
+    }
+    return `
+      <div class="task completed">
+        <div class="task-top">
+          <div>
+            <div class="task-ref">${escapeHtml(r && r.ref_code ? r.ref_code : '')}</div>
+            <div class="task-addr">${addr}</div>
+          </div>
+          <div class="task-badges">
+            <span class="badge price ${r && r.laundry_service ? 'laundry' : ''}">${price}</span>
+            <span style="font-family:var(--mono); font-size:12px; color:var(--muted);">${dateStr}</span>
+          </div>
         </div>
+        <div class="task-notes">Cliente: ${client} · Hóspedes: ${guestCount} · Estadia: ${stay} dias ${laundryLabel}</div>
+        ${timeLine}
       </div>
-      <div class="task-notes">Cliente: ${escapeHtml(r.client_name)} · Hóspedes: ${r.guest_count} · Estadia: ${r.stay_duration} dias ${r.laundry_service ? '· 🧺 com lavagem' : ''}</div>
-      ${r.work_start && r.work_end ? `<div style="color:var(--success); margin-top:8px; font-size:13px; font-weight:600;">⏱️ Tempo: ${formatDuration((new Date(r.work_end) - new Date(r.work_start)) / 1000)}</div>` : ''}
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 </script>
 </body>
