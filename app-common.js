@@ -1,6 +1,11 @@
 /* ============================================================
    K213 — núcleo compartilhado (config, auth, utilitários)
-   Carregado por todas as páginas via <script src="assets/app-common.js">
+   Carregado por todas as páginas via <script src="app-common.js">
+
+   ATUALIZAÇÃO: login por USUÁRIO+SENHA própria (tabela "usuarios"),
+   sem depender de confirmação de email. Recuperação de senha por
+   CÓDIGO gerado na criação da conta (guarde-o, não tem outro jeito
+   de recuperar).
    ============================================================ */
 
 /* ---------- CONFIGURAÇÃO SUPABASE — edite aqui ---------- */
@@ -21,52 +26,99 @@ function renderSetupWarning(){
     <div class="setup-warning">
       <h2>⚠️ Configuração pendente</h2>
       <p>Este app ainda não está ligado a um projeto Supabase.</p>
-      <p>Abra <code>assets/app-common.js</code>, encontre <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code> no topo do arquivo, e substitua pelos valores do seu projeto (Settings → API no painel do Supabase).</p>
-      <p>Consulte <strong>LEIA-ME-SETUP.md</strong> para o passo a passo completo.</p>
+      <p>Abra <code>app-common.js</code>, encontre <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code> no topo do arquivo, e substitua pelos valores do seu projeto (Settings → API no painel do Supabase).</p>
     </div>`;
 }
 
-/* ---------- perfil ---------- */
-async function ensureProfile(user){
-  const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  if (profile) return profile;
+/* ============================================================
+   AUTENTICAÇÃO PRÓPRIA (usuário + senha + código de recuperação)
+   ============================================================ */
 
-  let pending = JSON.parse(localStorage.getItem('k213_pending_profile') || 'null');
-  if (!pending) {
-    const name = prompt('Complete seu cadastro — qual é o seu nome?') || user.email;
-    const role = confirm('Você é o(a) profissional de limpeza?\n\nOK = Profissional   |   Cancelar = Cliente') ? 'profissional' : 'cliente';
-    pending = { name, role };
-  }
-  const { data: newProfile, error } = await supabase.from('profiles')
-    .insert({ id: user.id, name: pending.name, role: pending.role })
-    .select().single();
-  localStorage.removeItem('k213_pending_profile');
-  if (error) { console.error(error); return { id: user.id, name: user.email, role: 'cliente' }; }
-  return newProfile;
+/* hash SHA-256 da senha — nunca guardamos senha em texto puro */
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function getSessionAndProfile(){
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) return null;
-  const profile = await ensureProfile(session.user);
-  return { user: session.user, profile };
+/* gera um código de recuperação tipo AB3D-9F2K */
+function generateRecoveryCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I pra evitar confusão
+  let code = '';
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code.slice(0, 4) + '-' + code.slice(4);
+}
+
+/* sessão simples guardada no navegador (não é um JWT, é só local) */
+function getSession(){
+  try { return JSON.parse(localStorage.getItem('k213_session') || 'null'); }
+  catch { return null; }
+}
+function setSession(obj){
+  localStorage.setItem('k213_session', JSON.stringify(obj));
+}
+function clearSession(){
+  localStorage.removeItem('k213_session');
+}
+
+/* cria conta na tabela "usuarios" */
+async function criarConta(name, username, password, role){
+  const { data: existing } = await supabase.from('usuarios').select('id').eq('username', username).maybeSingle();
+  if (existing) throw new Error('Esse usuário já existe. Escolha outro nome de usuário.');
+
+  const password_hash = await sha256Hex(password);
+  const recovery_code = generateRecoveryCode();
+
+  const { data, error } = await supabase.from('usuarios')
+    .insert({ name, username, password_hash, recovery_code, role })
+    .select().single();
+  if (error) throw error;
+
+  return { user: data, recovery_code };
+}
+
+/* login por usuário + senha */
+async function entrarComSenha(username, password){
+  const password_hash = await sha256Hex(password);
+  const { data, error } = await supabase.from('usuarios')
+    .select('*').eq('username', username).eq('password_hash', password_hash).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Usuário ou senha incorretos.');
+  return data;
+}
+
+/* redefine a senha usando o código de recuperação, e gera um código novo */
+async function redefinirSenha(username, recoveryCode, newPassword){
+  const { data, error } = await supabase.from('usuarios')
+    .select('*').eq('username', username).eq('recovery_code', recoveryCode.toUpperCase()).maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('Usuário ou código de recuperação incorretos.');
+
+  const newHash = await sha256Hex(newPassword);
+  const newCode = generateRecoveryCode();
+  const { error: updErr } = await supabase.from('usuarios')
+    .update({ password_hash: newHash, recovery_code: newCode }).eq('id', data.id);
+  if (updErr) throw updErr;
+
+  return newCode;
 }
 
 /* ---------- guarda de rota ----------
    Chame no topo de cliente.html / profissional.html / relatorios.html.
    Se não estiver logado -> manda para index.html.
-   Se o papel não bater -> manda para a página certa dele (não deixa
-   cliente ver tela de profissional nem vice-versa). */
+   Se o papel não bater -> manda para a página certa dele. */
 async function requireRole(requiredRole){
   if (!K213_CONFIGURED) { renderSetupWarning(); return null; }
-  const ctx = await getSessionAndProfile();
-  if (!ctx) { window.location.href = 'index.html'; return null; }
-  if (ctx.profile.role !== requiredRole) {
-    window.location.href = ctx.profile.role === 'profissional' ? 'profissional.html' : 'cliente.html';
+  const session = getSession();
+  if (!session) { window.location.href = 'index.html'; return null; }
+  if (session.role !== requiredRole) {
+    window.location.href = session.role === 'profissional' ? 'profissional.html' : 'cliente.html';
     return null;
   }
-  paintWho(ctx.profile);
-  return ctx;
+  paintWho({ name: session.name, role: session.role });
+  return {
+    user: { id: session.id, email: session.username },
+    profile: { name: session.name, role: session.role }
+  };
 }
 
 function paintWho(profile){
@@ -74,9 +126,9 @@ function paintWho(profile){
   if (nameEl) nameEl.textContent = profile.name + ' · ' + (profile.role === 'profissional' ? 'Profissional' : 'Cliente');
 }
 
-async function logout(){
+function logout(){
   if (realtimeChannel && supabase) { supabase.removeChannel(realtimeChannel); realtimeChannel = null; }
-  if (supabase) await supabase.auth.signOut();
+  clearSession();
   window.location.href = 'index.html';
 }
 
@@ -134,9 +186,7 @@ async function getDefaultChecklist(){
   return data.items;
 }
 
-/* ---------- cronômetros ativos na tela ----------
-   Reinicia os intervalos toda vez que a lista é redesenhada,
-   sem duplicar contadores para o mesmo work_start. */
+/* ---------- cronômetros ativos na tela ---------- */
 const _activeTimerKeys = new Set();
 function attachTimers(list){
   list.forEach(req => {
@@ -156,7 +206,6 @@ function attachTimers(list){
 
 /* ---------- cartão de tarefa (compartilhado entre cliente/profissional) ---------- */
 function renderTaskCard(req, mode){
-  // mode: 'client' (somente leitura, sem checklist) | 'cleaner' (controla tudo)
   let timerHtml = '';
   if (req.status === 'in-progress' && req.work_start) {
     timerHtml = `<div class="timer-box">
