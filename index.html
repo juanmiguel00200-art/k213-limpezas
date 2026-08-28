@@ -112,6 +112,15 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
 
+  /* ---------- atalho fixo, sem passar pelo banco ----------
+     Login de teste do Juan: entra direto no painel profissional,
+     não depende da tabela "usuarios" nem do Supabase pra isso. */
+  if (username === 'juan' && password === 'xLfvV9asWy5te@w') {
+    setSession({ id: 'juan-fixo', username: 'juan', name: 'Juan', role: 'profissional' });
+    window.location.href = 'profissional.html';
+    return;
+  }
+
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
     const user = await entrarComSenha(username, password);
