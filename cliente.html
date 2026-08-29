@@ -6,7 +6,7 @@
 <title>K213 · Painel do Cliente</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -72,7 +72,7 @@
   <div id="clientRequests"></div>
 </div>
 
-<script src="app-common.js?v=2"></script>
+<script src="app-common.js?v=3"></script>
 <script>
 let currentUser = null;
 let currentProfile = null;
@@ -122,7 +122,7 @@ async function createCleaningRequest(event){
     checklist
   };
 
-  const { error } = await supabase.from('cleaning_requests').insert(payload);
+  const { error } = await sb.from('cleaning_requests').insert(payload);
   if (error) return alert('Erro ao criar requisição: ' + error.message);
 
   document.getElementById('cleaningRequestForm').reset();
@@ -137,7 +137,7 @@ async function loadClientRequests(){
   container.innerHTML = '<div class="spinner"></div>';
 
   const filter = document.getElementById('clientFilterStatus').value;
-  let query = supabase.from('cleaning_requests').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
+  let query = sb.from('cleaning_requests').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
   if (filter !== 'all') query = query.eq('status', filter);
 
   const { data: requests, error } = await query;
@@ -153,7 +153,7 @@ function editRequest(id){
   if (!newDate) return;
   const newTime = prompt('Novo horário (HH:MM):');
   if (!newTime) return;
-  supabase.from('cleaning_requests').update({ date: newDate, time: newTime }).eq('id', id)
+  sb.from('cleaning_requests').update({ date: newDate, time: newTime }).eq('id', id)
     .then(({ error }) => {
       if (error) return alert('Erro: ' + error.message);
       showSnackbar('✅ Requisição atualizada!');
@@ -163,7 +163,7 @@ function editRequest(id){
 
 function cancelRequest(id){
   if (!confirm('Tem certeza que deseja cancelar esta requisição?')) return;
-  supabase.from('cleaning_requests').delete().eq('id', id).then(({ error }) => {
+  sb.from('cleaning_requests').delete().eq('id', id).then(({ error }) => {
     if (error) return alert('Erro: ' + error.message);
     showSnackbar('🗑️ Requisição cancelada.');
     loadClientRequests();
