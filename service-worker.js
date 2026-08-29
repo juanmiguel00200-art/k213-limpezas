@@ -1,11 +1,11 @@
-const CACHE_NAME = 'cleansync-cache-v2';
+const CACHE_NAME = 'cleansync-cache-v4';
 const CORE_FILES = [
   './index.html',
   './cliente.html',
   './profissional.html',
   './relatorios.html',
-  './style.css?v=8',
-  './app-common.js?v=8',
+  './style.css?v=10',
+  './app-common.js?v=10',
   './manifest.json'
 ];
 
