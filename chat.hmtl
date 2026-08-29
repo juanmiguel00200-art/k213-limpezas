@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+/>
+
+<title>CleanSync · Chat</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
+  rel="stylesheet"
+>
+
+<link rel="manifest" href="manifest.json">
+
+<meta
+  name="theme-color"
+  content="#15151A"
+>
+
+<link
+  rel="stylesheet"
+  href="style.css?v=10"
+>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+</head>
+
+<body>
+
+<div id="snackbar" class="snackbar"></div>
+
+
+<!-- ======================================================
+     TOPO
+====================================================== -->
+
+<div class="topbar">
+
+  <div class="brand">
+
+    <div class="mark"></div>
+
+    <div>
+      <div class="name">CleanSync</div>
+      <div class="sub">CHAT DA LIMPEZA</div>
+    </div>
+
+  </div>
+
+
+  <div class="who">
+
+    <span class="sync-dot">
+      <span class="dot"></span>
+      ONLINE
+    </span>
+
+    <span id="topWhoName"></span>
+
+    <button
+      class="btn btn-ghost"
+      onclick="goBack()"
+    >
+      Voltar
+    </button>
+
+  </div>
+
+</div>
+
+
+
+<!-- ======================================================
+     CONTEÚDO
+====================================================== -->
+
+<div class="wrap">
+
+  <div class="page-hero">
+
+    <div class="eyebrow">
+      COMUNICAÇÃO
+    </div>
+
+    <h1 id="chatTitle">
+      Chat
+    </h1>
+
+    <p
+      class="lede"
+      id="chatSubtitle"
+    >
+      Conversa relacionada à limpeza.
+    </p>
+
+  </div>
+
+
+
+  <!-- ====================================================
+       CHAT
+  ===================================================== -->
+
+  <div class="card chat-card">
+
+    <div
+      id="messages"
+      class="chat-messages"
+    >
+
+      <div class="empty">
+        Carregando conversa...
+      </div>
+
+    </div>
+
+
+    <!-- DIGITAÇÃO -->
+
+    <form
+      id="messageForm"
+      class="chat-input-area"
+    >
+
+      <textarea
+        id="messageInput"
+        rows="1"
+        maxlength="2000"
+        placeholder="Digite uma mensagem..."
+        autocomplete="off"
+      ></textarea>
+
+
+      <button
+        type="submit"
+        class="btn btn-accent chat-send"
+        id="sendButton"
+      >
+        ➤
+      </button>
+
+    </form>
+
+  </div>
+
+</div>
+
+
+
+<script src="app-common.js?v=10"></script>
+
+
+<script>
+
+let currentUser = null;
+let currentProfile = null;
+
+let conversationId = null;
+let realtimeChannel = null;
+
+let cleaningId = null;
+
+
+// ==========================================================
+// INICIALIZAÇÃO
+// ==========================================================
+
+(async function init(){
+
+  const ctx = await requireRole();
+
+  if (!ctx) return;
+
+  currentUser = ctx.user;
+  currentProfile = ctx.profile;
+
+
+  // Nome no topo
+  const topName =
+    document.getElementById('topWhoName');
+
+  if (topName) {
+    topName.textContent =
+      currentProfile.full_name ||
+      currentUser.email ||
+      '';
+  }
+
+
+  // ID da limpeza pela URL
+  const params =
+    new URLSearchParams(window.location.search);
+
+  cleaningId =
+    params.get('task');
+
+
+  if (!cleaningId) {
+
+    showError(
+      'Nenhuma limpeza foi selecionada.'
+    );
+
+    return;
+  }
+
+
+  // Carrega conversa
+  await initializeConversation();
+
+})();
+
+
+// ==========================================================
+// CRIAR / OBTER CONVERSA
+// ==========================================================
+
+async function initializeConversation(){
+
+  try {
+
+    const { data, error } =
+      await sb.rpc(
+        'create_cleaning_conversation',
+        {
+          p_cleaning_id: cleaningId
+        }
+      );
+
+
+    if (error) {
+      throw error;
+    }
+
+
+    conversationId = data;
+
+
+    // Carrega informações da limpeza
+    await loadCleaning();
+
+
+    // Carrega mensagens existentes
+    await loadMessages();
+
+
+    // Ativa realtime
+    subscribeToMessages();
+
+
+    // Ajusta interface
+    setupInput();
+
+  }
+
+  catch(error){
+
+    console.error(error);
+
+    showError(
+      'Não foi possível abrir o chat: ' +
+      error.message
+    );
+
+  }
+
+}
+
+
+// ==========================================================
+// INFORMAÇÕES DA LIMPEZA
+// ==========================================================
+
+async function loadCleaning(){
+
+  const { data, error } =
+    await sb
+      .from('cleaning_requests')
+      .select(`
+        id,
+        ref_code,
+        client_name,
+        address,
+        date,
+        professional_id,
+        client_id
+      `)
+      .eq('id', cleaningId)
+      .single();
+
+
+  if (error) {
+
+    console.error(error);
+
+    return;
+  }
+
+
+  const title =
+    document.getElementById('chatTitle');
+
+  const subtitle =
+    document.getElementById('chatSubtitle');
+
+
+  if (title) {
+
+    title.textContent =
+      'Chat · ' +
+      (data.ref_code || 'Limpeza');
+
+  }
+
+
+  if (subtitle) {
+
+    subtitle.textContent =
+      data.address ||
+      'Conversa da limpeza';
+
+  }
+
+}
+
+
+// ==========================================================
+// CARREGAR MENSAGENS
+// ==========================================================
+
+async function loadMessages(){
+
+  const container =
+    document.getElementById('messages');
+
+
+  const { data, error } =
+    await sb
+      .from('messages')
+      .select(`
+        id,
+        sender_id,
+        content,
+        created_at
+      `)
+      .eq(
+        'conversation_id',
+        conversationId
+      )
+      .order(
+        'created_at',
+        {
+          ascending: true
+        }
+      );
+
+
+  if (error) {
+
+    showError(
+      'Erro ao carregar mensagens: ' +
+      error.message
+    );
+
+    return;
+  }
+
+
+  if (!data || !data.length){
+
+    container.innerHTML = `
+      <div class="chat-empty">
+        <div class="chat-empty-icon">💬</div>
+
+        <strong>
+          Inicie a conversa
+        </strong>
+
+        <span>
+          Envie uma mensagem para o outro participante desta limpeza.
+        </span>
+      </div>
+    `;
+
+    return;
+  }
+
+
+  container.innerHTML =
+    data
+      .map(renderMessage)
+      .join('');
+
+
+  scrollMessages();
+
+}
+
+
+// ==========================================================
+// RENDERIZAR MENSAGEM
+// ==========================================================
+
+function renderMessage(message){
+
+  const mine =
+    message.sender_id === currentUser.id;
+
+
+  const date =
+    new Date(message.created_at);
+
+
+  const time =
+    date.toLocaleTimeString(
+      'pt-BR',
+      {
+        hour: '2-digit',
+        minute: '2-digit'
+      }
+    );
+
+
+  return `
+
+    <div
+      class="chat-message
+      ${mine ? 'mine' : 'theirs'}"
+      data-message-id="${message.id}"
+    >
+
+      <div class="chat-bubble">
+
+        <div class="chat-content">
+          ${escapeHtml(message.content)}
+        </div>
+
+        <div class="chat-time">
+          ${time}
+        </div>
+
+      </div>
+
+    </div>
+
+  `;
+
+}
+
+
+// ==========================================================
+// REALTIME
+// ==========================================================
+
+function subscribeToMessages(){
+
+  if (!conversationId) return;
+
+
+  if (realtimeChannel){
+
+    sb.removeChannel(
+      realtimeChannel
+    );
+
+  }
+
+
+  realtimeChannel =
+    sb
+      .channel(
+        'chat-' + conversationId
+      )
+
+
+      .on(
+
+        'postgres_changes',
+
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter:
+            'conversation_id=eq.' +
+            conversationId
+        },
+
+        payload => {
+
+          const message =
+            payload.new;
+
+
+          // Evita duplicação
+          if (
+            document.querySelector(
+              `[data-message-id="${message.id}"]`
+            )
+          ) {
+            return;
+          }
+
+
+          const container =
+            document.getElementById(
+              'messages'
+            );
+
+
+          // Remove estado vazio
+          const empty =
+            container.querySelector(
+              '.chat-empty'
+            );
+
+          if (empty) {
+            container.innerHTML = '';
+          }
+
+
+          container.insertAdjacentHTML(
+            'beforeend',
+            renderMessage(message)
+          );
+
+
+          scrollMessages();
+
+        }
+
+      )
+
+
+      .subscribe(
+
+        status => {
+
+          console.log(
+            'Chat realtime:',
+            status
+          );
+
+        }
+
+      );
+
+}
+
+
+// ==========================================================
+// ENVIAR MENSAGEM
+// ==========================================================
+
+document
+  .getElementById('messageForm')
+  .addEventListener(
+    'submit',
+    sendMessage
+  );
+
+
+async function sendMessage(event){
+
+  event.preventDefault();
+
+
+  if (!conversationId) {
+
+    showSnackbar(
+      'Chat ainda não está pronto.'
+    );
+
+    return;
+  }
+
+
+  const input =
+    document.getElementById(
+      'messageInput'
+    );
+
+
+  const button =
+    document.getElementById(
+      'sendButton'
+    );
+
+
+  const content =
+    input.value.trim();
+
+
+  if (!content) return;
+
+
+  input.disabled = true;
+  button.disabled = true;
+
+
+  const { error } =
+    await sb
+      .from('messages')
+      .insert({
+
+        conversation_id:
+          conversationId,
+
+        sender_id:
+          currentUser.id,
+
+        content:
+          content
+
+      });
+
+
+  input.disabled = false;
+  button.disabled = false;
+
+
+  if (error){
+
+    console.error(error);
+
+    showSnackbar(
+      'Erro ao enviar mensagem.'
+    );
+
+    return;
+  }
+
+
+  input.value = '';
+
+  autoResizeInput();
+
+  input.focus();
+
+}
+
+
+// ==========================================================
+// INPUT
+// ==========================================================
+
+function setupInput(){
+
+  const input =
+    document.getElementById(
+      'messageInput'
+    );
+
+
+  input.addEventListener(
+    'input',
+    autoResizeInput
+  );
+
+
+  input.addEventListener(
+    'keydown',
+    event => {
+
+      if (
+        event.key === 'Enter' &&
+        !event.shiftKey
+      ){
+
+        event.preventDefault();
+
+        document
+          .getElementById(
+            'messageForm'
+          )
+          .requestSubmit();
+
+      }
+
+    }
+  );
+
+}
+
+
+function autoResizeInput(){
+
+  const input =
+    document.getElementById(
+      'messageInput'
+    );
+
+
+  input.style.height = 'auto';
+
+  input.style.height =
+    Math.min(
+      input.scrollHeight,
+      120
+    ) + 'px';
+
+}
+
+
+// ==========================================================
+// SCROLL
+// ==========================================================
+
+function scrollMessages(){
+
+  const container =
+    document.getElementById(
+      'messages'
+    );
+
+
+  requestAnimationFrame(() => {
+
+    container.scrollTop =
+      container.scrollHeight;
+
+  });
+
+}
+
+
+// ==========================================================
+// VOLTAR
+// ==========================================================
+
+function goBack(){
+
+  if (
+    currentProfile &&
+    currentProfile.role === 'professional'
+  ){
+
+    window.location.href =
+      'profissional.html';
+
+  }
+
+  else {
+
+    window.location.href =
+      'cliente.html';
+
+  }
+
+}
+
+
+// ==========================================================
+// ERRO
+// ==========================================================
+
+function showError(message){
+
+  const container =
+    document.getElementById(
+      'messages'
+    );
+
+
+  container.innerHTML = `
+
+    <div class="empty">
+
+      ${escapeHtml(message)}
+
+    </div>
+
+  `;
+
+}
+
+</script>
+
+
+<style>
+
+/* ==========================================================
+   CHAT — COMPONENTE
+========================================================== */
+
+.chat-card{
+  padding:0;
+  overflow:hidden;
+}
+
+
+/* Área das mensagens */
+
+.chat-messages{
+
+  height:520px;
+
+  overflow-y:auto;
+
+  padding:24px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  gap:10px;
+
+  background:
+    radial-gradient(
+      circle at 10% 20%,
+      rgba(196,26,72,.06),
+      transparent 35%
+    ),
+
+    var(--dark2);
+
+}
+
+
+/* Mensagem */
+
+.chat-message{
+
+  display:flex;
+
+  width:100%;
+
+}
+
+
+.chat-message.mine{
+
+  justify-content:flex-end;
+
+}
+
+
+.chat-message.theirs{
+
+  justify-content:flex-start;
+
+}
+
+
+/* Balão */
+
+.chat-bubble{
+
+  max-width:min(
+    75%,
+    520px
+  );
+
+  padding:11px 14px;
+
+  border-radius:16px;
+
+  border:1px solid var(--border);
+
+  background:var(--dark3);
+
+}
+
+
+.chat-message.mine
+.chat-bubble{
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--wine),
+      var(--pink)
+    );
+
+  border-color:
+    rgba(255,255,255,.12);
+
+  border-bottom-right-radius:5px;
+
+}
+
+
+.chat-message.theirs
+.chat-bubble{
+
+  border-bottom-left-radius:5px;
+
+}
+
+
+/* Texto */
+
+.chat-content{
+
+  font-size:14px;
+
+  line-height:1.55;
+
+  color:var(--cream);
+
+  white-space:pre-wrap;
+
+  overflow-wrap:anywhere;
+
+}
+
+
+/* Horário */
+
+.chat-time{
+
+  margin-top:5px;
+
+  font-family:var(--mono);
+
+  font-size:9px;
+
+  opacity:.65;
+
+  text-align:right;
+
+}
+
+
+/* Input */
+
+.chat-input-area{
+
+  display:flex;
+
+  gap:10px;
+
+  padding:14px;
+
+  background:var(--dark3);
+
+  border-top:1px solid var(--border);
+
+}
+
+
+.chat-input-area textarea{
+
+  flex:1;
+
+  resize:none;
+
+  max-height:120px;
+
+  min-height:44px;
+
+  padding:12px 14px;
+
+  border-radius:12px;
+
+  border:1.5px solid var(--border-strong);
+
+  background:var(--dark2);
+
+  color:var(--cream);
+
+  font-family:var(--sans);
+
+  font-size:14px;
+
+  line-height:1.4;
+
+}
+
+
+.chat-input-area textarea:focus{
+
+  outline:none;
+
+  border-color:var(--pink);
+
+  box-shadow:
+    0 0 0 3px
+    rgba(196,26,72,.15);
+
+}
+
+
+.chat-send{
+
+  width:48px;
+
+  min-width:48px;
+
+  height:44px;
+
+  padding:0;
+
+  font-size:18px;
+
+}
+
+
+/* Estado vazio */
+
+.chat-empty{
+
+  min-height:360px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  align-items:center;
+
+  justify-content:center;
+
+  text-align:center;
+
+  color:var(--muted);
+
+  gap:8px;
+
+}
+
+
+.chat-empty-icon{
+
+  font-size:40px;
+
+  margin-bottom:5px;
+
+}
+
+
+.chat-empty strong{
+
+  color:var(--cream);
+
+  font-family:var(--display);
+
+  font-size:22px;
+
+}
+
+
+.chat-empty span{
+
+  max-width:320px;
+
+  font-size:12px;
+
+  line-height:1.5;
+
+}
+
+
+@media(max-width:600px){
+
+  .chat-messages{
+
+    height:
+      calc(
+        100vh - 310px
+      );
+
+    min-height:380px;
+
+    padding:16px;
+
+  }
+
+
+  .chat-bubble{
+
+    max-width:85%;
+
+  }
+
+
+  .chat-input-area{
+
+    position:sticky;
+
+    bottom:0;
+
+  }
+
+}
+
+</style>
+
+
+<script>
+
+if ('serviceWorker' in navigator) {
+
+  navigator.serviceWorker
+    .register(
+      'service-worker.js'
+    )
+    .catch(console.error);
+
+}
+
+</script>
+
+</body>
+</html>
