@@ -79,12 +79,26 @@
     <div class="auth-note" id="authNote">
       Não existe recuperação por e-mail aqui. Ao criar a conta, você recebe um <strong>código de recuperação</strong> — anote e guarde em lugar seguro. É a única forma de trocar sua senha se esquecer.
     </div>
+
+    <div style="margin-top:22px; padding-top:18px; border-top:1px dashed var(--border-strong); text-align:center;">
+      <p style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; font-family:var(--mono);">Modo demonstração — sem login</p>
+      <div style="display:flex; gap:8px;">
+        <button type="button" class="btn btn-outline" style="flex:1" onclick="demoEntrar('cliente')">Ver como Cliente</button>
+        <button type="button" class="btn btn-outline" style="flex:1" onclick="demoEntrar('profissional')">Ver como Profissional</button>
+      </div>
+    </div>
   </div>
 </div>
 
 <script src="app-common.js?v=2"></script>
 <script>
 if (!K213_CONFIGURED) renderSetupWarning();
+
+// modo demonstração — entra sem tocar no banco, só pra navegar pelo resto do app
+function demoEntrar(role){
+  setSession({ id: 'demo-' + role, username: 'demo', name: role === 'profissional' ? 'Profissional (demo)' : 'Cliente (demo)', role });
+  window.location.href = role === 'profissional' ? 'profissional.html' : 'cliente.html';
+}
 
 // se já tem sessão, manda direto pra tela certa
 (function initRedirect(){
