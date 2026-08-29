@@ -1,63 +1,73 @@
 /* ============================================================
-   CLEANSYNC
-   APP-COMMON.JS
+   CLEANSYNC — APP COMMON
    VERSÃO DEFINITIVA
+   ============================================================
 
    Compatível com:
-   - cliente.html
-   - profissional.html
-   - admin.html
-   - chat.html
-   - relatorios.html
 
-   Funções principais:
-   - Supabase
-   - autenticação
-   - permissões
-   - sessão
-   - realtime
-   - cards de tarefas
-   - checklist
-   - cronômetro
-   - fotos
-   - chat
-   - snackbar
+   cliente.html
+   profissional.html
+   chat.html
+
+   Supabase:
+   cleaning_requests
+   conversations
+   messages
+   default_checklist
+
+   Conversations:
+   id
+   task_id
+   client_id
+   professional_id
+   created_at
+   updated_at
+
+   Messages:
+   id
+   conversation_id
+   sender_id
+   content
+   created_at
 ============================================================ */
 
 
 /* ============================================================
-   1. CONFIGURAÇÃO SUPABASE
+   SUPABASE
 ============================================================ */
 
 const SUPABASE_URL =
+  window.SUPABASE_URL ||
   'https://oyxmrrazgjdnyzhyinhc.supabase.co';
 
 const SUPABASE_ANON_KEY =
+  window.SUPABASE_ANON_KEY ||
+  'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 
-'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 
+if (
+  !window.supabase
+) {
 
-/*
-   Evita criar duas instâncias do Supabase
-*/
+  console.error(
+    'Supabase JS não foi carregado.'
+  );
+
+}
+
 
 let sb = null;
 
+
 try {
 
-  if (
-    typeof window !== 'undefined' &&
-    window.supabase
-  ) {
+  sb = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+  );
 
-    sb = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
-
-  }
-
-} catch (error) {
+}
+catch (error) {
 
   console.error(
     'Erro ao inicializar Supabase:',
@@ -67,43 +77,36 @@ try {
 }
 
 
-/*
-   Disponibiliza a URL globalmente.
-   O profissional.html usa window.SUPABASE_URL
-   para chamar a Edge Function.
-*/
-
-window.SUPABASE_URL = SUPABASE_URL;
-
 
 /* ============================================================
-   2. PREÇOS
+   CONFIGURAÇÕES
 ============================================================ */
 
 const PRICE_BASE = 40;
+
 const PRICE_WITH_LAUNDRY = 50;
 
-
-/* ============================================================
-   3. ESTADO GLOBAL
-============================================================ */
-
-let realtimeChannel = null;
-
-let currentSession = null;
-
-let currentAuthUser = null;
+const CLEANING_PHOTOS_BUCKET =
+  'cleaning-photos';
 
 
 /* ============================================================
-   4. UTILITÁRIOS
+   ESTADO GLOBAL
+============================================================ */
+
+window.CleanSync = window.CleanSync || {};
+
+window.CleanSync.supabase = sb;
+
+
+/* ============================================================
+   HELPERS
 ============================================================ */
 
 
-/*
-   Debounce
-*/
-
+/**
+ * Debounce
+ */
 function debounce(
   fn,
   delay = 300
@@ -111,7 +114,7 @@ function debounce(
 
   let timer = null;
 
-  return function(...args) {
+  return function (...args) {
 
     clearTimeout(timer);
 
@@ -125,35 +128,46 @@ function debounce(
 }
 
 
-/*
-   Escape HTML
-*/
-
+/**
+ * Escape HTML
+ */
 function escapeHtml(value) {
 
   if (
     value === null ||
     value === undefined
   ) {
-
     return '';
-
   }
 
   return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(
+      /&/g,
+      '&amp;'
+    )
+    .replace(
+      /</g,
+      '&lt;'
+    )
+    .replace(
+      />/g,
+      '&gt;'
+    )
+    .replace(
+      /"/g,
+      '&quot;'
+    )
+    .replace(
+      /'/g,
+      '&#039;'
+    );
 
 }
 
 
-/*
-   Escape para atributo HTML
-*/
-
+/**
+ * Escape para atributo HTML
+ */
 function escapeAttr(value) {
 
   return escapeHtml(value);
@@ -161,27 +175,34 @@ function escapeAttr(value) {
 }
 
 
-/*
-   Formata data
-*/
+/**
+ * Formatação de data
+ */
+function formatDate(
+  value
+) {
 
-function formatDate(dateValue) {
-
-  if (!dateValue) {
+  if (!value) {
     return '—';
   }
 
   const date =
     new Date(
-      dateValue + (
-        dateValue.length === 10
+      value + (
+        String(value).length === 10
           ? 'T00:00:00'
           : ''
       )
     );
 
-  if (Number.isNaN(date.getTime())) {
-    return dateValue;
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+
+    return escapeHtml(value);
+
   }
 
   return date.toLocaleDateString(
@@ -191,39 +212,29 @@ function formatDate(dateValue) {
 }
 
 
-/*
-   Formata data e hora
-*/
-
-function formatDateTime(value) {
+/**
+ * Formatação de hora
+ */
+function formatTime(
+  value
+) {
 
   if (!value) {
     return '—';
   }
 
-  const date =
-    new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return '—';
-  }
-
-  return date.toLocaleString(
-    'pt-BR',
-    {
-      dateStyle: 'short',
-      timeStyle: 'short'
-    }
-  );
+  return String(value)
+    .slice(0, 5);
 
 }
 
 
-/*
-   Formata moeda CHF
-*/
-
-function formatCHF(value) {
+/**
+ * Formatação CHF
+ */
+function formatCHF(
+  value
+) {
 
   const number =
     Number(value || 0);
@@ -240,10 +251,16 @@ function formatCHF(value) {
 
 
 /* ============================================================
-   5. SNACKBAR
+   SNACKBAR
 ============================================================ */
 
-function showSnackbar(message) {
+let snackbarTimer = null;
+
+
+function showSnackbar(
+  message,
+  duration = 3200
+) {
 
   const snackbar =
     document.getElementById(
@@ -252,24 +269,30 @@ function showSnackbar(message) {
 
   if (!snackbar) {
 
-    console.log(message);
+    console.log(
+      message
+    );
 
     return;
 
   }
 
+
   snackbar.textContent =
     message;
+
 
   snackbar.classList.add(
     'show'
   );
 
+
   clearTimeout(
-    snackbar._timer
+    snackbarTimer
   );
 
-  snackbar._timer =
+
+  snackbarTimer =
     setTimeout(
       () => {
 
@@ -278,14 +301,14 @@ function showSnackbar(message) {
         );
 
       },
-      3500
+      duration
     );
 
 }
 
 
 /* ============================================================
-   6. SESSÃO
+   SESSÃO
 ============================================================ */
 
 function getSession() {
@@ -297,52 +320,68 @@ function getSession() {
         'cleansync_session'
       );
 
-    if (!raw) {
+    if (raw) {
 
-      return {
-        address: ''
-      };
+      return JSON.parse(
+        raw
+      );
 
     }
 
-    return JSON.parse(raw);
+  }
+  catch (error) {
 
-  } catch {
-
-    return {
-      address: ''
-    };
+    console.warn(
+      'Erro ao ler sessão:',
+      error
+    );
 
   }
+
+
+  return {};
 
 }
 
 
-/*
-   Salva informações extras da sessão
-*/
-
-function setSession(data) {
+function saveSession(
+  data
+) {
 
   try {
 
-    const current =
-      getSession();
-
-    const merged = {
-      ...current,
-      ...data
-    };
-
     sessionStorage.setItem(
       'cleansync_session',
-      JSON.stringify(merged)
+      JSON.stringify(
+        data || {}
+      )
     );
 
-  } catch (error) {
+  }
+  catch (error) {
 
-    console.error(
-      'Erro ao salvar sessão:',
+    console.warn(
+      'Não foi possível salvar sessão:',
+      error
+    );
+
+  }
+
+}
+
+
+function clearSession() {
+
+  try {
+
+    sessionStorage.removeItem(
+      'cleansync_session'
+    );
+
+  }
+  catch (error) {
+
+    console.warn(
       error
     );
 
@@ -352,53 +391,19 @@ function setSession(data) {
 
 
 /* ============================================================
-   7. USUÁRIO AUTENTICADO
-============================================================ */
-
-async function getCurrentUser() {
-
-  if (!sb) {
-
-    console.error(
-      'Supabase não inicializado.'
-    );
-
-    return null;
-
-  }
-
-  const {
-    data,
-    error
-  } = await sb.auth.getUser();
-
-  if (error) {
-
-    console.error(
-      'Erro ao obter usuário:',
-      error
-    );
-
-    return null;
-
-  }
-
-  return data.user || null;
-
-}
-
-
-/* ============================================================
-   8. PERFIL
+   PERFIL
 ============================================================ */
 
 async function getCurrentProfile(
   userId
 ) {
 
-  if (!userId) {
+  if (!sb || !userId) {
+
     return null;
+
   }
+
 
   const {
     data,
@@ -410,12 +415,13 @@ async function getCurrentProfile(
       'id',
       userId
     )
-    .single();
+    .maybeSingle();
+
 
   if (error) {
 
     console.error(
-      'Erro ao carregar perfil:',
+      'Erro ao buscar perfil:',
       error
     );
 
@@ -423,231 +429,76 @@ async function getCurrentProfile(
 
   }
 
-  return data;
+
+  return data || null;
+
+}
+
+
+/**
+ * Nome seguro do perfil
+ *
+ * Aceita:
+ * full_name
+ * name
+ * display_name
+ * username
+ */
+function getProfileName(
+  profile,
+  user
+) {
+
+  if (profile) {
+
+    return (
+      profile.full_name ||
+      profile.name ||
+      profile.display_name ||
+      profile.username ||
+      ''
+    );
+
+  }
+
+  return (
+    user?.email ||
+    ''
+  );
 
 }
 
 
 /* ============================================================
-   9. REQUIRE ROLE
+   AUTENTICAÇÃO / REQUIRE ROLE
 ============================================================ */
 
 async function requireRole(
   requiredRole = null
 ) {
 
-  try {
+  if (!sb) {
 
-    if (!sb) {
-
-      alert(
-        'Supabase não foi configurado no app-common.js.'
-      );
-
-      return null;
-
-    }
-
-
-    /*
-       Obtém sessão
-    */
-
-    const {
-      data: sessionData,
-      error: sessionError
-    } =
-      await sb.auth.getSession();
-
-
-    if (
-      sessionError ||
-      !sessionData ||
-      !sessionData.session
-    ) {
-
-      window.location.href =
-        'index.html';
-
-      return null;
-
-    }
-
-
-    const session =
-      sessionData.session;
-
-    currentSession =
-      session;
-
-
-    const user =
-      session.user;
-
-    currentAuthUser =
-      user;
-
-
-    /*
-       Perfil
-    */
-
-    const profile =
-      await getCurrentProfile(
-        user.id
-      );
-
-
-    if (!profile) {
-
-      alert(
-        'Seu perfil não foi encontrado.'
-      );
-
-      await sb.auth.signOut();
-
-      window.location.href =
-        'index.html';
-
-      return null;
-
-    }
-
-
-    /*
-       Nome
-    */
-
-    const profileName =
-      profile.full_name ||
-      profile.name ||
-      user.user_metadata?.full_name ||
-      user.email ||
-      'Usuário';
-
-
-    profile.full_name =
-      profileName;
-
-
-    if (!profile.name) {
-
-      profile.name =
-        profileName;
-
-    }
-
-
-    /*
-       Preenche nome do topo
-    */
-
-    const topWhoName =
-      document.getElementById(
-        'topWhoName'
-      );
-
-    if (topWhoName) {
-
-      topWhoName.textContent =
-        profileName;
-
-    }
-
-
-    /*
-       Permissão
-    */
-
-    if (requiredRole) {
-
-      const role =
-        profile.role;
-
-
-      /*
-         Admin possui acesso
-         ao painel profissional
-      */
-
-      const allowed =
-        role === requiredRole ||
-        (
-          requiredRole === 'profissional' &&
-          role === 'admin'
-        );
-
-
-      if (!allowed) {
-
-        if (role === 'cliente') {
-
-          window.location.href =
-            'cliente.html';
-
-        }
-
-        else if (
-          role === 'profissional' ||
-          role === 'admin'
-        ) {
-
-          window.location.href =
-            'profissional.html';
-
-        }
-
-        else {
-
-          await sb.auth.signOut();
-
-          window.location.href =
-            'index.html';
-
-        }
-
-        return null;
-
-      }
-
-    }
-
-
-    /*
-       Salva sessão local
-    */
-
-    setSession({
-
-      user_id:
-        user.id,
-
-      email:
-        user.email,
-
-      role:
-        profile.role,
-
-      name:
-        profileName
-
-    });
-
-
-    return {
-
-      user,
-      profile,
-      session
-
-    };
-
-  } catch (error) {
-
-    console.error(
-      'requireRole:',
-      error
+    showSnackbar(
+      'Erro: Supabase não configurado.'
     );
+
+    return null;
+
+  }
+
+
+  const {
+    data,
+    error
+  } = await sb.auth.getSession();
+
+
+  if (
+    error ||
+    !data ||
+    !data.session
+  ) {
 
     window.location.href =
       'index.html';
@@ -656,11 +507,204 @@ async function requireRole(
 
   }
 
+
+  const user =
+    data.session.user;
+
+
+  const profile =
+    await getCurrentProfile(
+      user.id
+    );
+
+
+  if (!profile) {
+
+    console.error(
+      'Perfil não encontrado.'
+    );
+
+
+    showSnackbar(
+      'Perfil do usuário não encontrado.'
+    );
+
+
+    await sb.auth.signOut();
+
+
+    window.location.href =
+      'index.html';
+
+
+    return null;
+
+  }
+
+
+  /*
+   * Compatibilidade:
+   *
+   * cliente
+   * profissional
+   * admin
+   */
+
+  const role =
+    profile.role;
+
+
+  let authorized = true;
+
+
+  if (requiredRole) {
+
+    if (
+      requiredRole === 'profissional'
+    ) {
+
+      authorized =
+        role === 'profissional' ||
+        role === 'admin';
+
+    }
+
+    else if (
+      requiredRole === 'cliente'
+    ) {
+
+      authorized =
+        role === 'cliente';
+
+    }
+
+    else {
+
+      authorized =
+        role === requiredRole;
+
+    }
+
+  }
+
+
+  if (!authorized) {
+
+    if (
+      role === 'cliente'
+    ) {
+
+      window.location.href =
+        'cliente.html';
+
+    }
+
+    else if (
+      role === 'profissional' ||
+      role === 'admin'
+    ) {
+
+      window.location.href =
+        'profissional.html';
+
+    }
+
+    else {
+
+      window.location.href =
+        'index.html';
+
+    }
+
+
+    return null;
+
+  }
+
+
+  /*
+   * Salva sessão local auxiliar
+   */
+
+  saveSession({
+
+    user_id:
+      user.id,
+
+    email:
+      user.email,
+
+    role:
+      role,
+
+    name:
+      getProfileName(
+        profile,
+        user
+      ),
+
+    address:
+      profile.address ||
+      ''
+
+  });
+
+
+  /*
+   * Atualiza nome no topo
+   */
+
+  const topName =
+    document.getElementById(
+      'topWhoName'
+    );
+
+
+  if (topName) {
+
+    topName.textContent =
+      getProfileName(
+        profile,
+        user
+      ) ||
+      user.email ||
+      '';
+
+  }
+
+
+  /*
+   * Mostra link de admin
+   */
+
+  const adminLink =
+    document.getElementById(
+      'navAdminLink'
+    );
+
+
+  if (adminLink) {
+
+    adminLink.style.display =
+      role === 'admin'
+        ? ''
+        : 'none';
+
+  }
+
+
+  return {
+
+    user,
+    profile
+
+  };
+
 }
 
 
 /* ============================================================
-   10. LOGOUT
+   LOGOUT
 ============================================================ */
 
 async function logout() {
@@ -673,7 +717,8 @@ async function logout() {
 
     }
 
-  } catch (error) {
+  }
+  catch (error) {
 
     console.error(
       'Erro ao sair:',
@@ -683,13 +728,7 @@ async function logout() {
   }
 
 
-  try {
-
-    sessionStorage.removeItem(
-      'cleansync_session'
-    );
-
-  } catch {}
+  clearSession();
 
 
   window.location.href =
@@ -699,14 +738,66 @@ async function logout() {
 
 
 /* ============================================================
-   11. CHECKLIST PADRÃO
+   CHECKLIST PADRÃO
 ============================================================ */
+
+const FALLBACK_CHECKLIST = [
+
+  {
+    id: 'entrance',
+    label: 'Verificar entrada e acesso'
+  },
+
+  {
+    id: 'living',
+    label: 'Limpar sala e áreas comuns'
+  },
+
+  {
+    id: 'kitchen',
+    label: 'Limpar cozinha'
+  },
+
+  {
+    id: 'bathroom',
+    label: 'Limpar banheiro'
+  },
+
+  {
+    id: 'bedrooms',
+    label: 'Organizar quartos'
+  },
+
+  {
+    id: 'floor',
+    label: 'Limpar pisos'
+  },
+
+  {
+    id: 'trash',
+    label: 'Retirar lixo'
+  },
+
+  {
+    id: 'laundry',
+    label: 'Lavagem de roupa'
+  }
+
+];
+
 
 async function getDefaultChecklist() {
 
-  /*
-     Primeiro tenta buscar do banco.
-  */
+  if (!sb) {
+
+    return FALLBACK_CHECKLIST.map(
+      item => ({
+        ...item
+      })
+    );
+
+  }
+
 
   try {
 
@@ -720,90 +811,129 @@ async function getDefaultChecklist() {
         'id',
         1
       )
-      .single();
+      .maybeSingle();
 
 
     if (
       !error &&
       data &&
-      Array.isArray(data.items)
+      Array.isArray(
+        data.items
+      )
     ) {
 
       return data.items;
 
     }
 
-  } catch (error) {
+  }
+  catch (error) {
 
     console.warn(
-      'Não foi possível carregar checklist do banco:',
+      'Erro no checklist padrão:',
       error
     );
 
   }
 
 
-  /*
-     Fallback.
-     Caso a tabela ainda não exista
-     ou esteja vazia.
-  */
-
-  return [
-
-    {
-      id: 'bathroom',
-      label: 'Limpar banheiro'
-    },
-
-    {
-      id: 'bedroom',
-      label: 'Organizar quartos'
-    },
-
-    {
-      id: 'kitchen',
-      label: 'Limpar cozinha'
-    },
-
-    {
-      id: 'living',
-      label: 'Limpar sala'
-    },
-
-    {
-      id: 'floors',
-      label: 'Limpar pisos'
-    },
-
-    {
-      id: 'trash',
-      label: 'Retirar lixo'
-    },
-
-    {
-      id: 'laundry',
-      label: 'Lavagem de roupa'
-    }
-
-  ];
+  return FALLBACK_CHECKLIST.map(
+    item => ({
+      ...item
+    })
+  );
 
 }
 
 
 /* ============================================================
-   12. CHECKLIST DA TAREFA
+   STATUS
+============================================================ */
+
+function getStatusLabel(
+  status
+) {
+
+  const labels = {
+
+    pending:
+      'Pendente',
+
+    'in-progress':
+      'Em andamento',
+
+    completed:
+      'Concluída',
+
+    cancelled:
+      'Cancelada'
+
+  };
+
+
+  return (
+    labels[status] ||
+    status ||
+    'Pendente'
+  );
+
+}
+
+
+function getStatusClass(
+  status
+) {
+
+  if (
+    status === 'completed'
+  ) {
+
+    return 'completed';
+
+  }
+
+
+  if (
+    status === 'in-progress'
+  ) {
+
+    return 'in-progress';
+
+  }
+
+
+  if (
+    status === 'cancelled'
+  ) {
+
+    return 'cancelled';
+
+  }
+
+
+  return 'pending';
+
+}
+
+
+/* ============================================================
+   CHECKLIST HELPERS
 ============================================================ */
 
 function normalizeChecklist(
   checklist
 ) {
 
-  if (!Array.isArray(checklist)) {
+  if (
+    !Array.isArray(
+      checklist
+    )
+  ) {
 
     return [];
 
   }
+
 
   return checklist.map(
     (item, index) => ({
@@ -814,7 +944,8 @@ function normalizeChecklist(
 
       label:
         item.label ||
-        'Tarefa',
+        item.name ||
+        `Tarefa ${index + 1}`,
 
       done:
         Boolean(
@@ -827,408 +958,45 @@ function normalizeChecklist(
 }
 
 
-/* ============================================================
-   13. STATUS
-============================================================ */
-
-function getStatusLabel(
-  status
+function getChecklistProgress(
+  checklist
 ) {
 
-  switch (status) {
-
-    case 'pending':
-      return 'Pendente';
-
-    case 'in-progress':
-      return 'Em andamento';
-
-    case 'completed':
-      return 'Concluída';
-
-    case 'cancelled':
-      return 'Cancelada';
-
-    default:
-      return status || 'Desconhecido';
-
-  }
-
-}
-
-
-function getStatusClass(
-  status
-) {
-
-  switch (status) {
-
-    case 'pending':
-      return 'status-pending';
-
-    case 'in-progress':
-      return 'status-progress';
-
-    case 'completed':
-      return 'status-completed';
-
-    case 'cancelled':
-      return 'status-cancelled';
-
-    default:
-      return '';
-
-  }
-
-}
-
-
-/* ============================================================
-   14. CHECKLIST HTML
-============================================================ */
-
-function renderChecklist(
-  task
-) {
-
-  const checklist =
+  const items =
     normalizeChecklist(
-      task.checklist
+      checklist
     );
 
 
-  if (!checklist.length) {
-
-    return `
-      <div class="checklist">
-        <div class="checklist-progress">
-          Sem checklist
-        </div>
-      </div>
-    `;
-
-  }
+  const total =
+    items.length;
 
 
-  const doneCount =
-    checklist.filter(
+  const done =
+    items.filter(
       item => item.done
     ).length;
 
 
-  return `
+  return {
 
-    <div class="checklist">
+    total,
+    done,
 
-      <div class="checklist-head">
+    percent:
+      total
+        ? Math.round(
+            done / total * 100
+          )
+        : 0
 
-        <strong>
-          Checklist
-        </strong>
-
-        <span class="checklist-progress">
-          ${doneCount} / ${checklist.length} concluídos
-        </span>
-
-      </div>
-
-
-      <div class="checklist-list">
-
-        ${checklist.map(item => {
-
-          const id =
-            escapeAttr(
-              item.id
-            );
-
-          const label =
-            escapeHtml(
-              item.label
-            );
-
-          return `
-
-            <label
-              class="checklist-item ${item.done ? 'done' : ''}"
-            >
-
-              <input
-                type="checkbox"
-                id="ck_${id}_${task.id}"
-                ${item.done ? 'checked' : ''}
-                onchange="
-                  if (
-                    typeof toggleChecklistItem === 'function'
-                  ) {
-                    toggleChecklistItem(
-                      '${id}',
-                      '${escapeAttr(task.id)}'
-                    );
-                  }
-                "
-              >
-
-              <span>
-                ${label}
-              </span>
-
-            </label>
-
-          `;
-
-        }).join('')}
-
-      </div>
-
-    </div>
-
-  `;
+  };
 
 }
 
 
 /* ============================================================
-   15. TIMER
-============================================================ */
-
-function calculateElapsed(
-  start,
-  end = null
-) {
-
-  if (!start) {
-    return 0;
-  }
-
-  const startDate =
-    new Date(start);
-
-  if (
-    Number.isNaN(
-      startDate.getTime()
-    )
-  ) {
-
-    return 0;
-
-  }
-
-  const endDate =
-    end
-      ? new Date(end)
-      : new Date();
-
-  const seconds =
-    Math.max(
-      0,
-      Math.floor(
-        (
-          endDate.getTime() -
-          startDate.getTime()
-        ) / 1000
-      )
-    );
-
-  return seconds;
-
-}
-
-
-function formatElapsed(
-  seconds
-) {
-
-  seconds =
-    Math.max(
-      0,
-      Number(seconds || 0)
-    );
-
-
-  const hours =
-    Math.floor(
-      seconds / 3600
-    );
-
-
-  const minutes =
-    Math.floor(
-      (
-        seconds % 3600
-      ) / 60
-    );
-
-
-  const secs =
-    seconds % 60;
-
-
-  return [
-    String(hours).padStart(
-      2,
-      '0'
-    ),
-
-    String(minutes).padStart(
-      2,
-      '0'
-    ),
-
-    String(secs).padStart(
-      2,
-      '0'
-    )
-
-  ].join(':');
-
-}
-
-
-/* ============================================================
-   16. TIMER VISUAL
-============================================================ */
-
-function updateTimerElement(
-  task
-) {
-
-  const timer =
-    document.querySelector(
-      `[data-timer-id="${task.id}"]`
-    );
-
-
-  if (!timer) {
-    return;
-  }
-
-
-  if (!task.work_start) {
-
-    timer.textContent =
-      '00:00:00';
-
-    return;
-
-  }
-
-
-  const elapsed =
-    calculateElapsed(
-      task.work_start,
-      task.work_end
-    );
-
-
-  timer.textContent =
-    formatElapsed(
-      elapsed
-    );
-
-}
-
-
-/* ============================================================
-   17. ATTACH TIMERS
-============================================================ */
-
-function attachTimers(
-  tasks
-) {
-
-  if (!Array.isArray(tasks)) {
-    return;
-  }
-
-
-  tasks.forEach(
-    task => {
-
-      updateTimerElement(
-        task
-      );
-
-    }
-  );
-
-
-  /*
-     Um único intervalo global.
-  */
-
-  if (
-    window.__cleanSyncTimerInterval
-  ) {
-
-    clearInterval(
-      window.__cleanSyncTimerInterval
-    );
-
-  }
-
-
-  window.__cleanSyncTimerInterval =
-    setInterval(
-      () => {
-
-        tasks.forEach(
-          task => {
-
-            if (
-              task.work_start &&
-              !task.work_end
-            ) {
-
-              updateTimerElement(
-                task
-              );
-
-            }
-
-          }
-        );
-
-      },
-      1000
-    );
-
-}
-
-
-/* ============================================================
-   18. BOTÃO DE CHAT
-============================================================ */
-
-function chatButton(
-  task
-) {
-
-  if (!task || !task.id) {
-    return '';
-  }
-
-
-  return `
-
-    <button
-      type="button"
-      class="btn btn-outline task-chat-btn"
-      onclick="
-        window.location.href =
-          'chat.html?task=${encodeURIComponent(task.id)}'
-      "
-    >
-      💬 Chat
-    </button>
-
-  `;
-
-}
-
-
-/* ============================================================
-   19. RENDER TASK CARD
+   RENDER TASK CARD
 ============================================================ */
 
 function renderTaskCard(
@@ -1236,29 +1004,9 @@ function renderTaskCard(
   mode = 'client'
 ) {
 
-  if (!task) {
-    return '';
-  }
-
-
-  const checklist =
-    normalizeChecklist(
-      task.checklist
-    );
-
-
-  const doneCount =
-    checklist.filter(
-      item => item.done
-    ).length;
-
-
-  const totalCount =
-    checklist.length;
-
-
   const status =
-    task.status || 'pending';
+    task.status ||
+    'pending';
 
 
   const statusLabel =
@@ -1273,491 +1021,69 @@ function renderTaskCard(
     );
 
 
-  const price =
-    Number(
-      task.price || (
-        task.laundry_service
-          ? PRICE_WITH_LAUNDRY
-          : PRICE_BASE
-      )
+  const checklist =
+    normalizeChecklist(
+      task.checklist
     );
 
 
-  const taskId =
-    escapeAttr(
-      task.id
+  const progress =
+    getChecklistProgress(
+      checklist
     );
 
-
-  const refCode =
-    escapeHtml(
-      task.ref_code ||
-      'SEM REFERÊNCIA'
-    );
-
-
-  const clientName =
-    escapeHtml(
-      task.client_name ||
-      'Cliente'
-    );
-
-
-  const address =
-    escapeHtml(
-      task.address ||
-      'Endereço não informado'
-    );
-
-
-  const date =
-    escapeHtml(
-      formatDate(
-        task.date
-      )
-    );
-
-
-  const time =
-    escapeHtml(
-      task.time ||
-      '—'
-    );
-
-
-  const notes =
-    escapeHtml(
-      task.notes ||
-      ''
-    );
-
-
-  const duration =
-    task.stay_duration ||
-    '—';
-
-
-  const guests =
-    task.guest_count ||
-    '—';
-
-
-  /*
-     Admin
-  */
 
   const isAdmin =
     mode === 'admin';
 
 
-  /*
-     Cliente
-  */
+  const isCleaner =
+    mode === 'cleaner';
+
 
   const isClient =
     mode === 'client';
 
 
-  /*
-     Profissional
-  */
-
-  const isCleaner =
-    mode === 'cleaner';
-
-
-  let actions =
-    '';
-
-
-  /*
-     ==========================================================
-     CLIENTE
-     ==========================================================
-  */
-
-  if (isClient) {
-
-    actions += chatButton(
-      task
-    );
-
-
-    if (
-      status === 'pending'
-    ) {
-
-      actions += `
-
-        <button
-          type="button"
-          class="btn btn-outline"
-          onclick="
-            toggleEditForm(
-              '${taskId}'
-            )
-          "
-        >
-          ✏️ Editar
-        </button>
-
-        <button
-          type="button"
-          class="btn btn-danger"
-          onclick="
-            cancelRequest(
-              '${taskId}'
-            )
-          "
-        >
-          🗑️ Cancelar
-        </button>
-
-      `;
-
-    }
-
-  }
-
-
-  /*
-     ==========================================================
-     PROFISSIONAL
-     ==========================================================
-  */
-
-  if (isCleaner) {
-
-    actions += chatButton(
-      task
-    );
-
-
-    if (
-      status === 'pending'
-    ) {
-
-      actions += `
-
-        <button
-          type="button"
-          class="btn btn-accent"
-          onclick="
-            startTimer(
-              '${taskId}'
-            )
-          "
-        >
-          ▶️ Iniciar trabalho
-        </button>
-
-      `;
-
-    }
-
-
-    if (
-      status === 'in-progress'
-    ) {
-
-      actions += `
-
-        <button
-          type="button"
-          class="btn btn-outline"
-          onclick="
-            stopTimer(
-              '${taskId}'
-            )
-          "
-        >
-          ⏹️ Finalizar trabalho
-        </button>
-
-        <button
-          type="button"
-          class="btn btn-accent"
-          onclick="
-            completeTask(
-              '${taskId}'
-            )
-          "
-        >
-          ✅ Concluir
-        </button>
-
-      `;
-
-    }
-
-
-    if (
-      status !== 'completed'
-    ) {
-
-      actions += `
-
-        <label
-          class="btn btn-outline"
-          style="cursor:pointer;"
-        >
-          📸 Fotos
-
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            style="display:none;"
-            onchange="
-              uploadPhotos(
-                '${taskId}',
-                this
-              )
-            "
-          >
-
-        </label>
-
-      `;
-
-    }
-
-  }
-
-
-  /*
-     ==========================================================
-     ADMIN
-     ==========================================================
-  */
-
-  if (isAdmin) {
-
-    actions += chatButton(
-      task
-    );
-
-
-    actions += `
-
-      <button
-        type="button"
-        class="btn btn-outline"
-        onclick="
-          adminEditPrice(
-            '${taskId}',
-            ${price}
-          )
-        "
-      >
-        💰 Valor
-      </button>
-
-      <button
-        type="button"
-        class="btn btn-danger"
-        onclick="
-          adminDeleteTask(
-            '${taskId}'
-          )
-        "
-      >
-        🗑️ Excluir
-      </button>
-
-    `;
-
-  }
-
-
-  /*
-     Fotos
-  */
-
-  let photosHtml =
-    '';
-
-
-  if (
+  const photos =
     Array.isArray(
       task.photos
-    ) &&
-    task.photos.length
-  ) {
-
-    photosHtml = `
-
-      <div class="task-photos">
-
-        ${task.photos.map(
-          photo => `
-
-            <a
-              href="${escapeAttr(photo)}"
-              target="_blank"
-              rel="noopener"
-            >
-
-              <img
-                src="${escapeAttr(photo)}"
-                alt="Foto da limpeza"
-                loading="lazy"
-              >
-
-            </a>
-
-          `
-        ).join('')}
-
-      </div>
-
-    `;
-
-  }
+    )
+      ? task.photos
+      : [];
 
 
-  /*
-     Tempo
-  */
-
-  const timerHtml =
-    task.work_start
-
-      ? `
-
-        <div class="task-timer">
-
-          <span>
-            ⏱️ Tempo
-          </span>
-
-          <strong
-            data-timer-id="${taskId}"
-          >
-            ${formatElapsed(
-              calculateElapsed(
-                task.work_start,
-                task.work_end
-              )
-            )}
-          </strong>
-
-        </div>
-
-      `
-
-      : '';
+  const refCode =
+    task.ref_code ||
+    'LIMPEZA';
 
 
-  /*
-     Observações
-  */
-
-  const notesHtml =
-    notes
-
-      ? `
-
-        <div class="task-notes">
-
-          <strong>
-            Observações
-          </strong>
-
-          <div>
-            ${notes}
-          </div>
-
-        </div>
-
-      `
-
-      : '';
+  const clientName =
+    task.client_name ||
+    'Cliente';
 
 
-  /*
-     Formulário de edição
-     usado pelo cliente
-  */
-
-  const editForm =
-    isClient &&
-    status === 'pending'
-
-      ? `
-
-        <div
-          id="editForm_${taskId}"
-          class="task-edit-form"
-          style="display:none;"
-        >
-
-          <div class="field-row">
-
-            <div class="field">
-
-              <label>
-                Nova data
-              </label>
-
-              <input
-                type="date"
-                id="editDate_${taskId}"
-                value="${escapeAttr(
-                  task.date || ''
-                )}"
-              >
-
-            </div>
+  const professionalName =
+    task.professional_name ||
+    '';
 
 
-            <div class="field">
-
-              <label>
-                Novo horário
-              </label>
-
-              <input
-                type="time"
-                id="editTime_${taskId}"
-                value="${escapeAttr(
-                  task.time || ''
-                )}"
-              >
-
-            </div>
-
-          </div>
+  const price =
+    task.price !== null &&
+    task.price !== undefined
+      ? task.price
+      : (
+          task.laundry_service
+            ? PRICE_WITH_LAUNDRY
+            : PRICE_BASE
+        );
 
 
-          <button
-            type="button"
-            class="btn btn-accent"
-            onclick="
-              saveEditRequest(
-                '${taskId}'
-              )
-            "
-          >
-            💾 Salvar alterações
-          </button>
+  let html = `
 
-        </div>
-
-      `
-
-      : '';
-
-
-  /*
-     Card final
-  */
-
-  return `
-
-    <article
-      class="task"
-      data-task-id="${taskId}"
+    <div
+      class="task card"
+      data-task-id="${escapeAttr(task.id)}"
     >
 
       <div class="task-head">
@@ -1765,130 +1091,230 @@ function renderTaskCard(
         <div>
 
           <div class="task-ref">
-            ${refCode}
+            ${escapeHtml(refCode)}
           </div>
 
-          <h3>
-            ${clientName}
+          <h3 class="task-title">
+            ${escapeHtml(
+              task.address ||
+              'Endereço não informado'
+            )}
           </h3>
 
         </div>
 
 
         <span
-          class="status ${statusClass}"
+          class="status status-${statusClass}"
         >
-          ${statusLabel}
+          ${escapeHtml(statusLabel)}
         </span>
 
       </div>
 
 
-      <div class="task-grid">
+      <div class="task-meta">
 
-        <div class="task-info">
-
+        <div>
+          <strong>📅 Data</strong>
           <span>
-            📅
-            <strong>
-              Data
-            </strong>
+            ${escapeHtml(
+              formatDate(task.date)
+            )}
           </span>
-
-          <b>
-            ${date}
-          </b>
-
         </div>
 
-
-        <div class="task-info">
-
+        <div>
+          <strong>🕐 Horário</strong>
           <span>
-            🕐
-            <strong>
-              Horário
-            </strong>
+            ${escapeHtml(
+              formatTime(task.time)
+            )}
           </span>
-
-          <b>
-            ${time}
-          </b>
-
         </div>
 
-
-        <div class="task-info">
-
+        <div>
+          <strong>💰 Valor</strong>
           <span>
-            📍
-            <strong>
-              Endereço
-            </strong>
+            ${escapeHtml(
+              formatCHF(price)
+            )}
           </span>
-
-          <b>
-            ${address}
-          </b>
-
         </div>
 
-
-        <div class="task-info">
-
+        <div>
+          <strong>👥 Hóspedes</strong>
           <span>
-            👥
-            <strong>
-              Hóspedes
-            </strong>
+            ${escapeHtml(
+              task.guest_count || '—'
+            )}
           </span>
-
-          <b>
-            ${guests}
-          </b>
-
-        </div>
-
-
-        <div class="task-info">
-
-          <span>
-            🏠
-            <strong>
-              Estadia
-            </strong>
-          </span>
-
-          <b>
-            ${duration} dias
-          </b>
-
-        </div>
-
-
-        <div class="task-info">
-
-          <span>
-            💰
-            <strong>
-              Valor
-            </strong>
-          </span>
-
-          <b>
-            ${formatCHF(price)}
-          </b>
-
         </div>
 
       </div>
 
 
+      <div class="task-info">
+
+        ${
+          task.stay_duration
+            ? `
+              <span>
+                🏠 Estadia:
+                ${escapeHtml(
+                  task.stay_duration
+                )} dias
+              </span>
+            `
+            : ''
+        }
+
+        ${
+          task.laundry_service
+            ? `
+              <span>
+                🧺 Lavagem incluída
+              </span>
+            `
+            : ''
+        }
+
+        ${
+          professionalName
+            ? `
+              <span>
+                👤 Profissional:
+                ${escapeHtml(
+                  professionalName
+                )}
+              </span>
+            `
+            : ''
+        }
+
+      </div>
+
+
       ${
-        task.laundry_service
+        isCleaner || isAdmin
           ? `
-            <div class="laundry-badge">
-              🧺 Lavagem de roupa incluída
+            <div class="task-client">
+
+              <strong>
+                Cliente
+              </strong>
+
+              <span>
+                ${escapeHtml(
+                  clientName
+                )}
+              </span>
+
+            </div>
+          `
+          : ''
+      }
+
+
+      <div class="checklist-header">
+
+        <strong>
+          Checklist
+        </strong>
+
+        <span class="checklist-progress">
+          ${progress.done} / ${progress.total}
+          concluídos
+        </span>
+
+      </div>
+
+
+      <div class="checklist">
+
+        ${
+          checklist.length
+            ? checklist.map(
+                item => {
+
+                  const checked =
+                    item.done
+                      ? 'checked'
+                      : '';
+
+                  return `
+
+                    <label
+                      class="checklist-item
+                      ${item.done ? 'done' : ''}"
+                    >
+
+                      ${
+                        isCleaner ||
+                        isAdmin
+                          ? `
+                            <input
+                              type="checkbox"
+                              id="ck_${escapeAttr(
+                                item.id
+                              )}_${escapeAttr(
+                                task.id
+                              )}"
+                              ${checked}
+                              onchange="
+                                toggleChecklistItem(
+                                  '${escapeAttr(task.id)}',
+                                  '${escapeAttr(item.id)}'
+                                )
+                              "
+                            >
+                          `
+                          : `
+                            <input
+                              type="checkbox"
+                              ${checked}
+                              disabled
+                            >
+                          `
+                      }
+
+                      <span>
+                        ${escapeHtml(
+                          item.label
+                        )}
+                      </span>
+
+                    </label>
+
+                  `;
+
+                }
+              ).join('')
+            : `
+              <div class="empty-small">
+                Nenhum item no checklist.
+              </div>
+            `
+        }
+
+      </div>
+
+
+      ${
+        task.notes
+          ? `
+            <div class="task-notes">
+
+              <strong>
+                📝 Observações
+              </strong>
+
+              <p>
+                ${escapeHtml(
+                  task.notes
+                )}
+              </p>
+
             </div>
           `
           : ''
@@ -1896,80 +1322,301 @@ function renderTaskCard(
 
 
       ${
-        totalCount
-          ? renderChecklist(task)
-          : ''
-      }
-
-
-      ${timerHtml}
-
-
-      ${notesHtml}
-
-
-      ${photosHtml}
-
-
-      ${
-        actions
+        task.work_start
           ? `
-            <div class="task-actions">
-              ${actions}
+            <div class="timer-box">
+
+              <div>
+                <span class="timer-label">
+                  ⏱️ Tempo de trabalho
+                </span>
+
+                <strong
+                  class="live-timer"
+                  data-start="${escapeAttr(
+                    task.work_start
+                  )}"
+                  ${
+                    task.work_end
+                      ? `data-end="${escapeAttr(
+                          task.work_end
+                        )}"`
+                      : ''
+                  }
+                >
+                  00:00:00
+                </strong>
+              </div>
+
             </div>
           `
           : ''
       }
 
 
-      ${editForm}
+      ${
+        photos.length
+          ? `
+            <div class="task-photos">
 
-    </article>
+              <strong>
+                📸 Fotos
+              </strong>
+
+              <div class="photo-grid">
+
+                ${photos.map(
+                  photo => `
+
+                    <a
+                      href="${escapeAttr(photo)}"
+                      target="_blank"
+                      rel="noopener"
+                    >
+
+                      <img
+                        src="${escapeAttr(photo)}"
+                        alt="Foto da limpeza"
+                        loading="lazy"
+                      >
+
+                    </a>
+
+                  `
+                ).join('')}
+
+              </div>
+
+            </div>
+          `
+          : ''
+      }
+
+
+      <div class="task-actions">
+
+        <!-- CHAT -->
+
+        <button
+          class="btn btn-outline"
+          type="button"
+          onclick="openChat('${escapeAttr(task.id)}')"
+        >
+          💬 Chat
+        </button>
+
+
+        ${
+          isCleaner || isAdmin
+            ? `
+              ${
+                status !== 'in-progress' &&
+                status !== 'completed'
+                  ? `
+                    <button
+                      class="btn btn-accent"
+                      type="button"
+                      onclick="startTimer('${escapeAttr(task.id)}')"
+                    >
+                      ▶️ Iniciar trabalho
+                    </button>
+                  `
+                  : ''
+              }
+
+
+              ${
+                status === 'in-progress' &&
+                !task.work_end
+                  ? `
+                    <button
+                      class="btn btn-outline"
+                      type="button"
+                      onclick="stopTimer('${escapeAttr(task.id)}')"
+                    >
+                      ⏹️ Finalizar trabalho
+                    </button>
+                  `
+                  : ''
+              }
+
+
+              ${
+                status === 'in-progress' &&
+                task.work_end
+                  ? `
+                    <button
+                      class="btn btn-accent"
+                      type="button"
+                      onclick="completeTask('${escapeAttr(task.id)}')"
+                    >
+                      ✅ Concluir tarefa
+                    </button>
+                  `
+                  : ''
+              }
+
+
+              ${
+                status !== 'completed'
+                  ? `
+                    <label
+                      class="btn btn-outline photo-upload-label"
+                    >
+                      📷 Fotos
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        hidden
+                        onchange="
+                          uploadPhotos(
+                            '${escapeAttr(task.id)}',
+                            this
+                          )
+                        "
+                      >
+
+                    </label>
+                  `
+                  : ''
+              }
+
+            `
+            : ''
+        }
+
+
+        ${
+          isClient
+            ? `
+              ${
+                status === 'pending'
+                  ? `
+                    <button
+                      class="btn btn-outline"
+                      type="button"
+                      onclick="toggleEditForm('${escapeAttr(task.id)}')"
+                    >
+                      ✏️ Editar
+                    </button>
+
+                    <button
+                      class="btn btn-danger"
+                      type="button"
+                      onclick="cancelRequest('${escapeAttr(task.id)}')"
+                    >
+                      🗑️ Cancelar
+                    </button>
+                  `
+                  : ''
+              }
+            `
+            : ''
+        }
+
+
+        ${
+          isAdmin
+            ? `
+              <button
+                class="btn btn-danger"
+                type="button"
+                onclick="adminDeleteTask('${escapeAttr(task.id)}')"
+              >
+                🗑️ Excluir
+              </button>
+            `
+            : ''
+        }
+
+      </div>
+
+
+      ${
+        isClient &&
+        status === 'pending'
+          ? `
+            <div
+              class="edit-form"
+              id="editForm_${escapeAttr(task.id)}"
+              style="display:none;"
+            >
+
+              <div class="field-row">
+
+                <div class="field">
+
+                  <label>
+                    Nova data
+                  </label>
+
+                  <input
+                    type="date"
+                    id="editDate_${escapeAttr(task.id)}"
+                    value="${escapeAttr(
+                      task.date || ''
+                    )}"
+                  >
+
+                </div>
+
+
+                <div class="field">
+
+                  <label>
+                    Novo horário
+                  </label>
+
+                  <input
+                    type="time"
+                    id="editTime_${escapeAttr(task.id)}"
+                    value="${escapeAttr(
+                      task.time || ''
+                    )}"
+                  >
+
+                </div>
+
+              </div>
+
+
+              <button
+                class="btn btn-accent"
+                type="button"
+                onclick="saveEditRequest('${escapeAttr(task.id)}')"
+              >
+                💾 Salvar alterações
+              </button>
+
+            </div>
+          `
+          : ''
+      }
+
+    </div>
 
   `;
 
+
+  return html;
+
 }
 
 
 /* ============================================================
-   20. ADMIN — ALTERAR VALOR
+   CHAT
 ============================================================ */
 
-async function adminEditPrice(
-  id,
-  currentPrice
+function openChat(
+  taskId
 ) {
 
-  const value =
-    prompt(
-      'Digite o novo valor em CHF:',
-      currentPrice
-    );
+  if (!taskId) {
 
-
-  if (
-    value === null
-  ) {
-
-    return;
-
-  }
-
-
-  const price =
-    Number(
-      String(value)
-        .replace(',', '.')
-    );
-
-
-  if (
-    !Number.isFinite(price) ||
-    price < 0
-  ) {
-
-    alert(
-      'Digite um valor válido.'
+    showSnackbar(
+      'Não foi possível abrir o chat.'
     );
 
     return;
@@ -1977,111 +1624,168 @@ async function adminEditPrice(
   }
 
 
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .update({
-      price
-    })
-    .eq(
-      'id',
-      id
-    );
+  window.location.href =
+    `chat.html?task=${encodeURIComponent(
+      taskId
+    )}`;
+
+}
 
 
-  if (error) {
+/* ============================================================
+   CRONÔMETRO
+============================================================ */
 
-    alert(
-      'Erro ao alterar valor: ' +
-      error.message
-    );
-
-    return;
-
-  }
+let timerInterval = null;
 
 
-  showSnackbar(
-    '💰 Valor atualizado!'
+function attachTimers(
+  tasks = []
+) {
+
+  clearInterval(
+    timerInterval
   );
 
 
-  if (
-    typeof loadCleanerTasks ===
-    'function'
-  ) {
+  function updateTimers() {
 
-    loadCleanerTasks();
+    document
+      .querySelectorAll(
+        '.live-timer'
+      )
+      .forEach(
+        element => {
+
+          const start =
+            element.dataset.start;
+
+          const end =
+            element.dataset.end;
+
+
+          if (!start) {
+
+            element.textContent =
+              '00:00:00';
+
+            return;
+
+          }
+
+
+          const startDate =
+            new Date(start);
+
+
+          const endDate =
+            end
+              ? new Date(end)
+              : new Date();
+
+
+          let seconds =
+            Math.floor(
+              (
+                endDate.getTime() -
+                startDate.getTime()
+              ) / 1000
+            );
+
+
+          if (
+            !Number.isFinite(
+              seconds
+            ) ||
+            seconds < 0
+          ) {
+
+            seconds = 0;
+
+          }
+
+
+          element.textContent =
+            formatDuration(
+              seconds
+            );
+
+        }
+      );
 
   }
+
+
+  updateTimers();
+
+
+  timerInterval =
+    setInterval(
+      updateTimers,
+      1000
+    );
 
 }
 
 
-/* ============================================================
-   21. ADMIN — EXCLUIR TAREFA
-============================================================ */
-
-async function adminDeleteTask(
-  id
+function formatDuration(
+  totalSeconds
 ) {
 
-  const confirmed =
-    confirm(
-      'Tem certeza que deseja excluir esta tarefa?\n\n' +
-      'Esta ação não poderá ser desfeita.'
+  const seconds =
+    Math.max(
+      0,
+      Math.floor(
+        totalSeconds
+      )
     );
 
 
-  if (!confirmed) {
-    return;
-  }
-
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .delete()
-    .eq(
-      'id',
-      id
+  const h =
+    Math.floor(
+      seconds / 3600
     );
 
 
-  if (error) {
-
-    alert(
-      'Erro ao excluir tarefa: ' +
-      error.message
+  const m =
+    Math.floor(
+      (
+        seconds % 3600
+      ) / 60
     );
 
-    return;
 
-  }
-
-
-  showSnackbar(
-    '🗑️ Tarefa excluída.'
-  );
+  const s =
+    seconds % 60;
 
 
-  if (
-    typeof loadCleanerTasks ===
-    'function'
-  ) {
+  return [
+    String(h).padStart(
+      2,
+      '0'
+    ),
 
-    loadCleanerTasks();
+    String(m).padStart(
+      2,
+      '0'
+    ),
 
-  }
+    String(s).padStart(
+      2,
+      '0'
+    )
+
+  ].join(':');
 
 }
 
 
 /* ============================================================
-   22. REALTIME
+   REALTIME
 ============================================================ */
+
+let realtimeChannel = null;
+
 
 function startRealtime(
   callback
@@ -2089,41 +1793,25 @@ function startRealtime(
 
   if (!sb) {
 
-    console.error(
-      'Supabase não inicializado.'
-    );
-
     return null;
 
   }
 
 
-  /*
-     Remove canal anterior
-  */
-
   if (realtimeChannel) {
 
-    try {
-
-      sb.removeChannel(
-        realtimeChannel
-      );
-
-    } catch {}
+    sb.removeChannel(
+      realtimeChannel
+    );
 
   }
-
-
-  const channelName =
-    'cleansync-realtime-' +
-    Date.now();
 
 
   realtimeChannel =
     sb
       .channel(
-        channelName
+        'cleansync-global-' +
+        Date.now()
       )
 
 
@@ -2139,44 +1827,28 @@ function startRealtime(
 
         payload => {
 
-          console.log(
-            'Realtime cleaning_requests:',
-            payload
-          );
+          try {
 
+            if (
+              typeof callback ===
+              'function'
+            ) {
 
-          if (
-            typeof callback ===
-            'function'
-          ) {
+              callback(
+                payload
+              );
 
-            callback(
-              payload
+            }
+
+          }
+          catch (error) {
+
+            console.error(
+              'Realtime callback error:',
+              error
             );
 
           }
-
-        }
-
-      )
-
-
-      .on(
-
-        'postgres_changes',
-
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages'
-        },
-
-        payload => {
-
-          console.log(
-            'Realtime messages:',
-            payload
-          );
 
         }
 
@@ -2201,53 +1873,34 @@ function startRealtime(
 
 
 /* ============================================================
-   23. SERVICE WORKER / INSTALAÇÃO
+   ADMIN
 ============================================================ */
 
-function setupInstallAndNotifyBanner() {
+async function adminDeleteTask(
+  id
+) {
 
-  /*
-     Não força instalação.
-     Apenas prepara o evento PWA.
-  */
-
-  window.__deferredInstallPrompt =
-    null;
+  if (!id) {
+    return;
+  }
 
 
-  window.addEventListener(
-    'beforeinstallprompt',
-    event => {
-
-      event.preventDefault();
-
-      window.__deferredInstallPrompt =
-        event;
-
-      console.log(
-        'PWA disponível para instalação.'
-      );
-
-    }
-  );
-
-}
+  const confirmed =
+    confirm(
+      'Tem certeza que deseja excluir esta tarefa?\n\n' +
+      'Esta ação não poderá ser desfeita.'
+    );
 
 
-/*
-   Instalar PWA manualmente
-*/
-
-async function installApp() {
-
-  const promptEvent =
-    window.__deferredInstallPrompt;
+  if (!confirmed) {
+    return;
+  }
 
 
-  if (!promptEvent) {
+  if (!sb) {
 
-    showSnackbar(
-      'A instalação não está disponível agora.'
+    alert(
+      'Supabase não configurado.'
     );
 
     return;
@@ -2255,78 +1908,1678 @@ async function installApp() {
   }
 
 
-  promptEvent.prompt();
+  const {
+    error
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .delete()
+    .eq(
+      'id',
+      id
+    );
 
 
-  const result =
-    await promptEvent.userChoice;
+  if (error) {
+
+    console.error(
+      error
+    );
 
 
-  console.log(
-    'Instalação:',
-    result
+    alert(
+      'Erro ao excluir tarefa:\n' +
+      error.message
+    );
+
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '🗑️ Tarefa excluída.'
   );
 
 
-  window.__deferredInstallPrompt =
-    null;
+  /*
+   * Atualiza a página de tarefas
+   */
+
+  if (
+    typeof window.reloadTasks ===
+    'function'
+  ) {
+
+    window.reloadTasks();
+
+  }
+  else if (
+    typeof window.reloadRequests ===
+    'function'
+  ) {
+
+    window.reloadRequests();
+
+  }
 
 }
 
 
 /* ============================================================
-   24. LIMPEZA AO SAIR
+   EDITAR TAREFA
 ============================================================ */
 
-window.addEventListener(
-  'beforeunload',
-  () => {
+async function updateTask(
+  id,
+  fields
+) {
+
+  if (!sb || !id) {
+
+    return {
+      error:
+        new Error(
+          'Dados inválidos.'
+        )
+    };
+
+  }
+
+
+  return await sb
+    .from(
+      'cleaning_requests'
+    )
+    .update(
+      fields
+    )
+    .eq(
+      'id',
+      id
+    );
+
+}
+
+
+/* ============================================================
+   PÁGINA DE CLIENTE
+   Funções utilizadas pelo cliente.html
+============================================================ */
+
+async function cancelRequest(
+  id
+) {
+
+  if (!id) {
+    return;
+  }
+
+
+  const confirmed =
+    confirm(
+      'Tem certeza que deseja cancelar esta requisição?'
+    );
+
+
+  if (!confirmed) {
+    return;
+  }
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .delete()
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro ao cancelar:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '🗑️ Requisição cancelada.'
+  );
+
+
+  if (
+    typeof window.reloadRequests ===
+    'function'
+  ) {
+
+    window.reloadRequests();
+
+  }
+
+}
+
+
+/* ============================================================
+   EDIT FORM
+============================================================ */
+
+function toggleEditForm(
+  id
+) {
+
+  const form =
+    document.getElementById(
+      'editForm_' + id
+    );
+
+
+  if (!form) {
+    return;
+  }
+
+
+  if (
+    form.style.display ===
+    'none' ||
+    !form.style.display
+  ) {
+
+    form.style.display =
+      'block';
+
+  }
+  else {
+
+    form.style.display =
+      'none';
+
+  }
+
+}
+
+
+async function saveEditRequest(
+  id
+) {
+
+  const dateInput =
+    document.getElementById(
+      'editDate_' + id
+    );
+
+
+  const timeInput =
+    document.getElementById(
+      'editTime_' + id
+    );
+
+
+  if (
+    !dateInput ||
+    !timeInput
+  ) {
+
+    return;
+
+  }
+
+
+  const newDate =
+    dateInput.value;
+
+
+  const newTime =
+    timeInput.value;
+
+
+  if (
+    !newDate ||
+    !newTime
+  ) {
+
+    alert(
+      'Preencha data e horário.'
+    );
+
+    return;
+
+  }
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .update({
+
+      date:
+        newDate,
+
+      time:
+        newTime
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '✅ Requisição atualizada!'
+  );
+
+
+  if (
+    typeof window.reloadRequests ===
+    'function'
+  ) {
+
+    window.reloadRequests();
+
+  }
+
+}
+
+
+/* ============================================================
+   CRONÔMETRO
+============================================================ */
+
+async function startTimer(
+  id
+) {
+
+  if (!id) {
+    return;
+  }
+
+
+  const {
+    data: existing,
+    error: fetchError
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .select(
+      'status, work_start, work_end'
+    )
+    .eq(
+      'id',
+      id
+    )
+    .single();
+
+
+  if (fetchError) {
+
+    alert(
+      'Erro ao carregar tarefa:\n' +
+      fetchError.message
+    );
+
+    return;
+
+  }
+
+
+  if (
+    existing &&
+    existing.status ===
+      'completed'
+  ) {
+
+    showSnackbar(
+      'Esta tarefa já foi concluída.'
+    );
+
+    return;
+
+  }
+
+
+  if (
+    existing &&
+    existing.work_start &&
+    !existing.work_end
+  ) {
+
+    showSnackbar(
+      'O cronômetro já está em andamento.'
+    );
+
+    return;
+
+  }
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .update({
+
+      status:
+        'in-progress',
+
+      work_start:
+        new Date().toISOString(),
+
+      work_end:
+        null
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro ao iniciar:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '⏱️ Trabalho iniciado!'
+  );
+
+
+  if (
+    typeof window.reloadTasks ===
+    'function'
+  ) {
+
+    window.reloadTasks();
+
+  }
+  else {
+
+    location.reload();
+
+  }
+
+}
+
+
+async function stopTimer(
+  id
+) {
+
+  if (!id) {
+    return;
+  }
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .update({
+
+      work_end:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro ao finalizar:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '⏹️ Trabalho finalizado!'
+  );
+
+
+  if (
+    typeof window.reloadTasks ===
+    'function'
+  ) {
+
+    window.reloadTasks();
+
+  }
+  else {
+
+    location.reload();
+
+  }
+
+}
+
+
+/* ============================================================
+   CHECKLIST
+============================================================ */
+
+async function toggleChecklistItem(
+  id,
+  itemId
+) {
+
+  if (!id || !itemId) {
+    return;
+  }
+
+
+  /*
+   * Busca checklist atual
+   */
+
+  const {
+    data: row,
+    error: fetchError
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .select(
+      'checklist'
+    )
+    .eq(
+      'id',
+      id
+    )
+    .single();
+
+
+  if (fetchError) {
+
+    console.error(
+      fetchError
+    );
+
+    showSnackbar(
+      'Erro ao carregar checklist.'
+    );
+
+    return;
+
+  }
+
+
+  const checklist =
+    normalizeChecklist(
+      row?.checklist
+    );
+
+
+  const updated =
+    checklist.map(
+      item => {
+
+        if (
+          item.id === itemId
+        ) {
+
+          return {
+
+            ...item,
+
+            done:
+              !item.done
+
+          };
+
+        }
+
+
+        return item;
+
+      }
+    );
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'cleaning_requests'
+    )
+    .update({
+
+      checklist:
+        updated
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    console.error(
+      error
+    );
+
+
+    showSnackbar(
+      'Erro ao atualizar checklist.'
+    );
+
 
     if (
-      realtimeChannel &&
-      sb
+      typeof window.reloadTasks ===
+      'function'
     ) {
 
-      try {
-
-        sb.removeChannel(
-          realtimeChannel
-        );
-
-      } catch {}
+      window.reloadTasks();
 
     }
 
 
-    if (
-      window.__cleanSyncTimerInterval
-    ) {
+    return;
 
-      clearInterval(
-        window.__cleanSyncTimerInterval
+  }
+
+
+  /*
+   * Atualiza visualmente sem
+   * necessariamente recarregar tudo
+   */
+
+  const checkbox =
+    document.getElementById(
+      `ck_${itemId}_${id}`
+    );
+
+
+  if (checkbox) {
+
+    const itemDiv =
+      checkbox.closest(
+        '.checklist-item'
+      );
+
+
+    if (itemDiv) {
+
+      itemDiv.classList.toggle(
+        'done',
+        checkbox.checked
       );
 
     }
+
+
+    const task =
+      checkbox.closest(
+        '.task'
+      );
+
+
+    if (task) {
+
+      const boxes =
+        task.querySelectorAll(
+          '.checklist-item input[type="checkbox"]'
+        );
+
+
+      const done =
+        task.querySelectorAll(
+          '.checklist-item input[type="checkbox"]:checked'
+        ).length;
+
+
+      const progress =
+        task.querySelector(
+          '.checklist-progress'
+        );
+
+
+      if (progress) {
+
+        progress.textContent =
+          `${done} / ${boxes.length} concluídos`;
+
+      }
+
+    }
+
+  }
+
+}
+
+
+/* ============================================================
+   CONCLUIR TAREFA
+============================================================ */
+
+async function completeTask(
+  id
+) {
+
+  if (!id) {
+    return;
+  }
+
+
+  try {
+
+    /*
+     * Busca tarefa
+     */
+
+    const {
+      data: task,
+      error: fetchError
+    } = await sb
+      .from(
+        'cleaning_requests'
+      )
+      .select('*')
+      .eq(
+        'id',
+        id
+      )
+      .single();
+
+
+    if (fetchError) {
+
+      throw fetchError;
+
+    }
+
+
+    if (!task) {
+
+      throw new Error(
+        'Tarefa não encontrada.'
+      );
+
+    }
+
+
+    /*
+     * Checklist
+     */
+
+    const checklist =
+      normalizeChecklist(
+        task.checklist
+      );
+
+
+    const allDone =
+      checklist.length === 0 ||
+      checklist.every(
+        item => item.done
+      );
+
+
+    if (!allDone) {
+
+      const continueAnyway =
+        confirm(
+          'Alguns itens do checklist ainda não foram concluídos.\n\n' +
+          'Deseja concluir a tarefa mesmo assim?'
+        );
+
+
+      if (!continueAnyway) {
+
+        return;
+
+      }
+
+    }
+
+
+    /*
+     * Cronômetro
+     */
+
+    if (
+      !task.work_start ||
+      !task.work_end
+    ) {
+
+      alert(
+        'Use o cronômetro antes de concluir a tarefa.\n\n' +
+        'Inicie o trabalho e depois finalize o cronômetro.'
+      );
+
+      return;
+
+    }
+
+
+    /*
+     * Conclusão
+     */
+
+    const {
+      data: updatedTask,
+      error: updateError
+    } = await sb
+      .from(
+        'cleaning_requests'
+      )
+      .update({
+
+        status:
+          'completed',
+
+        completed_at:
+          new Date().toISOString()
+
+      })
+      .eq(
+        'id',
+        id
+      )
+      .select()
+      .single();
+
+
+    if (updateError) {
+
+      throw updateError;
+
+    }
+
+
+    showSnackbar(
+      '✅ Tarefa concluída!'
+    );
+
+
+    if (
+      typeof window.reloadTasks ===
+      'function'
+    ) {
+
+      window.reloadTasks();
+
+    }
+
+
+    /*
+     * Notificação
+     *
+     * A Edge Function é opcional.
+     * Se existir, tenta chamar.
+     */
+
+    await notifyTaskCompleted(
+      updatedTask
+    );
+
+  }
+  catch (error) {
+
+    console.error(
+      'Erro ao concluir:',
+      error
+    );
+
+
+    alert(
+      'Erro ao concluir tarefa:\n' +
+      (
+        error.message ||
+        error
+      )
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   NOTIFICAÇÃO DE TAREFA CONCLUÍDA
+============================================================ */
+
+async function notifyTaskCompleted(
+  task
+) {
+
+  if (!task || !sb) {
+    return;
+  }
+
+
+  try {
+
+    const {
+      data,
+      error
+    } = await sb.auth.getSession();
+
+
+    if (
+      error ||
+      !data?.session
+    ) {
+
+      console.warn(
+        'Sessão não disponível para notificação.'
+      );
+
+      return;
+
+    }
+
+
+    const supabaseUrl =
+      window.SUPABASE_URL ||
+      SUPABASE_URL;
+
+
+    if (
+      !supabaseUrl ||
+      supabaseUrl.includes(
+        'COLOQUE_AQUI'
+      )
+    ) {
+
+      console.warn(
+        'SUPABASE_URL não configurada.'
+      );
+
+      return;
+
+    }
+
+
+    const response =
+      await fetch(
+        `${supabaseUrl}/functions/v1/notify-task-completed`,
+        {
+
+          method:
+            'POST',
+
+          headers: {
+
+            'Content-Type':
+              'application/json',
+
+            'Authorization':
+              `Bearer ${data.session.access_token}`
+
+          },
+
+          body:
+            JSON.stringify({
+
+              taskId:
+                task.id
+
+            })
+
+        }
+      );
+
+
+    const result =
+      await response
+        .json()
+        .catch(
+          () => ({})
+        );
+
+
+    if (!response.ok) {
+
+      console.warn(
+        'Notificação não enviada:',
+        result
+      );
+
+      return;
+
+    }
+
+
+    console.log(
+      'Notificação processada:',
+      result
+    );
+
+  }
+  catch (error) {
+
+    /*
+     * A tarefa já foi concluída.
+     * Falha da notificação não desfaz a conclusão.
+     */
+
+    console.warn(
+      'Falha na notificação:',
+      error
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   FOTOS
+============================================================ */
+
+async function uploadPhotos(
+  id,
+  input
+) {
+
+  if (!id || !input) {
+    return;
+  }
+
+
+  const files =
+    Array.from(
+      input.files || []
+    );
+
+
+  if (!files.length) {
+    return;
+  }
+
+
+  showSnackbar(
+    '📤 Enviando fotos...'
+  );
+
+
+  try {
+
+    const uploadedUrls = [];
+
+
+    for (
+      const file of files
+    ) {
+
+      /*
+       * Limite simples de segurança
+       */
+
+      if (
+        file.size >
+        15 * 1024 * 1024
+      ) {
+
+        throw new Error(
+          `${file.name} é maior que 15 MB.`
+        );
+
+      }
+
+
+      const safeName =
+        file.name
+          .replace(
+            /[^a-zA-Z0-9.\-_]/g,
+            '_'
+          );
+
+
+      const path =
+        `${id}/${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}-${safeName}`;
+
+
+      const {
+        error: uploadError
+      } = await sb.storage
+        .from(
+          CLEANING_PHOTOS_BUCKET
+        )
+        .upload(
+          path,
+          file,
+          {
+            upsert: false
+          }
+        );
+
+
+      if (uploadError) {
+
+        throw uploadError;
+
+      }
+
+
+      const {
+        data
+      } = sb.storage
+        .from(
+          CLEANING_PHOTOS_BUCKET
+        )
+        .getPublicUrl(
+          path
+        );
+
+
+      if (
+        data?.publicUrl
+      ) {
+
+        uploadedUrls.push(
+          data.publicUrl
+        );
+
+      }
+
+    }
+
+
+    if (!uploadedUrls.length) {
+
+      throw new Error(
+        'Nenhuma foto foi enviada.'
+      );
+
+    }
+
+
+    /*
+     * Busca fotos existentes
+     */
+
+    const {
+      data: row,
+      error: fetchError
+    } = await sb
+      .from(
+        'cleaning_requests'
+      )
+      .select(
+        'photos'
+      )
+      .eq(
+        'id',
+        id
+      )
+      .single();
+
+
+    if (fetchError) {
+
+      throw fetchError;
+
+    }
+
+
+    const existingPhotos =
+      Array.isArray(
+        row?.photos
+      )
+        ? row.photos
+        : [];
+
+
+    const allPhotos = [
+
+      ...existingPhotos,
+
+      ...uploadedUrls
+
+    ];
+
+
+    const {
+      error: updateError
+    } = await sb
+      .from(
+        'cleaning_requests'
+      )
+      .update({
+
+        photos:
+          allPhotos
+
+      })
+      .eq(
+        'id',
+        id
+      );
+
+
+    if (updateError) {
+
+      throw updateError;
+
+    }
+
+
+    input.value = '';
+
+
+    showSnackbar(
+      '📸 Fotos enviadas!'
+    );
+
+
+    if (
+      typeof window.reloadTasks ===
+      'function'
+    ) {
+
+      window.reloadTasks();
+
+    }
+
+  }
+  catch (error) {
+
+    console.error(
+      error
+    );
+
+
+    alert(
+      'Erro ao enviar fotos:\n' +
+      error.message
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   CHECKLIST ADMIN
+============================================================ */
+
+async function updateChecklistItemLabel(
+  itemId,
+  newLabel
+) {
+
+  const label =
+    String(
+      newLabel || ''
+    ).trim();
+
+
+  if (!label) {
+
+    showSnackbar(
+      'O nome da tarefa não pode ficar vazio.'
+    );
+
+    return;
+
+  }
+
+
+  const items =
+    await getDefaultChecklist();
+
+
+  const updated =
+    items.map(
+      item =>
+        item.id === itemId
+          ? {
+              ...item,
+              label
+            }
+          : item
+    );
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'default_checklist'
+    )
+    .update({
+
+      items:
+        updated,
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      1
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '✅ Checklist atualizado.'
+  );
+
+}
+
+
+async function addChecklistItem() {
+
+  const items =
+    await getDefaultChecklist();
+
+
+  items.push({
+
+    id:
+      'item_' +
+      Date.now(),
+
+    label:
+      'Nova tarefa'
+
+  });
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'default_checklist'
+    )
+    .update({
+
+      items,
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      1
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '✅ Item adicionado.'
+  );
+
+
+  if (
+    typeof window.loadChecklistEditor ===
+    'function'
+  ) {
+
+    window.loadChecklistEditor();
+
+  }
+  else {
+
+    location.reload();
+
+  }
+
+}
+
+
+async function removeChecklistItem(
+  itemId
+) {
+
+  const confirmed =
+    confirm(
+      'Remover este item do checklist padrão?'
+    );
+
+
+  if (!confirmed) {
+    return;
+  }
+
+
+  const items =
+    (
+      await getDefaultChecklist()
+    ).filter(
+      item =>
+        item.id !== itemId
+    );
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'default_checklist'
+    )
+    .update({
+
+      items,
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      1
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro:\n' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '🗑️ Item removido.'
+  );
+
+
+  if (
+    typeof window.loadChecklistEditor ===
+    'function'
+  ) {
+
+    window.loadChecklistEditor();
+
+  }
+  else {
+
+    location.reload();
+
+  }
+
+}
+
+
+/* ============================================================
+   PWA / INSTALL BANNER
+============================================================ */
+
+let deferredInstallPrompt =
+  null;
+
+
+window.addEventListener(
+  'beforeinstallprompt',
+  event => {
+
+    event.preventDefault();
+
+    deferredInstallPrompt =
+      event;
+
+  }
+);
+
+
+function setupInstallAndNotifyBanner() {
+
+  /*
+   * Não cria banner agressivo.
+   * Apenas prepara instalação PWA.
+   */
+
+  window.CleanSync.installApp =
+    async function () {
+
+      if (!deferredInstallPrompt) {
+
+        showSnackbar(
+          'A instalação não está disponível neste momento.'
+        );
+
+        return;
+
+      }
+
+
+      deferredInstallPrompt.prompt();
+
+
+      const result =
+        await deferredInstallPrompt.userChoice;
+
+
+      console.log(
+        'PWA install:',
+        result
+      );
+
+
+      deferredInstallPrompt =
+        null;
+
+    };
+
+}
+
+
+/* ============================================================
+   SERVICE WORKER
+============================================================ */
+
+function registerCleanSyncServiceWorker() {
+
+  if (
+    !('serviceWorker' in navigator)
+  ) {
+
+    return;
+
+  }
+
+
+  navigator.serviceWorker
+    .register(
+      'service-worker.js'
+    )
+    .then(
+      registration => {
+
+        console.log(
+          'CleanSync Service Worker:',
+          registration.scope
+        );
+
+      }
+    )
+    .catch(
+      error => {
+
+        console.warn(
+          'Service Worker:',
+          error
+        );
+
+      }
+    );
+
+}
+
+
+/* ============================================================
+   INICIALIZAÇÃO GLOBAL
+============================================================ */
+
+document.addEventListener(
+  'DOMContentLoaded',
+  () => {
+
+    setupInstallAndNotifyBanner();
 
   }
 );
 
 
 /* ============================================================
-   25. DEBUG
+   EXPORTAÇÃO GLOBAL
+   Necessário porque seus HTMLs chamam
+   essas funções diretamente.
+============================================================ */
+
+Object.assign(
+  window,
+  {
+
+    sb,
+
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+
+    PRICE_BASE,
+    PRICE_WITH_LAUNDRY,
+
+    debounce,
+    escapeHtml,
+    escapeAttr,
+
+    formatDate,
+    formatTime,
+    formatCHF,
+    formatDuration,
+
+    showSnackbar,
+
+    getSession,
+    saveSession,
+    clearSession,
+
+    getCurrentProfile,
+    getProfileName,
+
+    requireRole,
+    logout,
+
+    getDefaultChecklist,
+    normalizeChecklist,
+    getChecklistProgress,
+
+    getStatusLabel,
+    getStatusClass,
+
+    renderTaskCard,
+
+    openChat,
+
+    startRealtime,
+
+    attachTimers,
+
+    startTimer,
+    stopTimer,
+    completeTask,
+
+    toggleChecklistItem,
+
+    uploadPhotos,
+
+    toggleEditForm,
+    saveEditRequest,
+    cancelRequest,
+
+    adminDeleteTask,
+
+    updateTask,
+
+    updateChecklistItemLabel,
+    addChecklistItem,
+    removeChecklistItem,
+
+    notifyTaskCompleted,
+
+    setupInstallAndNotifyBanner,
+
+    registerCleanSyncServiceWorker
+
+  }
+);
+
+
+/* ============================================================
+   LOG
 ============================================================ */
 
 console.log(
-  '%cCleanSync App Common carregado',
-  'font-weight:bold;'
-);
-
-console.log(
-  'Supabase:',
-  Boolean(sb)
-);
-
-console.log(
-  'Versão:',
-  '10.0'
+  'CleanSync app-common carregado.'
 );
