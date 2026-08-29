@@ -15,7 +15,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
 
-const K213_CONFIGURED = !(SUPABASE_URL.includes('SEU-PROJETO') || SUPABASE_ANON_KEY.includes('SUA_CHAVE'));
+const K213_CONFIGURED = !(SUPABASE_URL.includes('https://oyxmrrazgjdnyzhyinhc.supabase.co';) || SUPABASE_ANON_KEY.includes('sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';));
 const supabase = K213_CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 let realtimeChannel = null;
