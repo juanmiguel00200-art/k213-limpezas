@@ -159,70 +159,116 @@ function debounce(fn, wait = 250){
   };
 }
 
-/* ---------- banner de instalar app / ativar notificações ----------
-   Os navegadores escondem esses avisos de propósito e demoram a
-   mostrar. Isso cria um banner visível, sob nosso controle. */
+/* ---------- instalar app (barra fixa) + ativar notificações (modal central) ----------
+   Os navegadores escondem esses avisos de propósito e demoram a mostrar.
+   Aqui a gente assume o controle: o convite pra instalar fica fixo
+   numa barrinha discreta, e o pedido de notificação aparece como um
+   cartão no meio da tela, já com o botão de permitir bem visível. */
 function setupInstallAndNotifyBanner(){
   let deferredInstallPrompt = null;
   let showInstall = false;
-  let showNotify = false;
+  let showNotifyModal = false;
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredInstallPrompt = e;
     showInstall = true;
-    renderBanner();
+    renderInstallBanner();
   });
   window.addEventListener('appinstalled', () => {
     showInstall = false;
-    renderBanner();
+    renderInstallBanner();
+    showSnackbar('🎉 App instalado! Já pode acessar direto da tela inicial.');
   });
 
   // se o app já roda instalado (modo standalone), não tem por que oferecer instalar
   if (window.matchMedia('(display-mode: standalone)').matches) showInstall = false;
 
-  if ('Notification' in window && Notification.permission === 'default') {
-    showNotify = true;
+  // não insiste com quem já respondeu (aceitou/negou) ou já dispensou nesta sessão
+  const notifyDismissedThisSession = sessionStorage.getItem('cleansync_notify_dismissed') === '1';
+  if ('Notification' in window && Notification.permission === 'default' && !notifyDismissedThisSession) {
+    showNotifyModal = true;
   }
 
-  function renderBanner(){
-    let el = document.getElementById('installNotifyBanner');
-    if (!showInstall && !showNotify) { if (el) el.remove(); return; }
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'installNotifyBanner';
-      el.style.cssText = 'position:sticky; top:0; z-index:100; background:var(--text); color:#fff; padding:10px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; font-size:12.5px; border-bottom:3px solid var(--accent);';
-      document.body.prepend(el);
-    }
+  /* ---------- barra fixa de instalação (persiste até instalar ou fechar) ---------- */
+  function renderInstallBanner(){
+    let el = document.getElementById('installBanner');
+    if (!showInstall) { if (el) el.remove(); return; }
+    if (el) return; // já está na tela, não precisa recriar
+
+    el = document.createElement('div');
+    el.id = 'installBanner';
+    el.className = 'install-banner';
     el.innerHTML = `
-      ${showInstall ? '<button class="btn btn-accent" id="btnInstallApp" style="clip-path:none;">📲 Instalar app</button>' : ''}
-      ${showNotify ? '<button class="btn btn-outline" id="btnActivateNotify" style="clip-path:none; background:transparent; color:#fff; border-color:rgba(255,255,255,.4);">🔔 Ativar notificações</button>' : ''}
-      <button id="btnDismissBanner" style="background:transparent; border:none; color:#aaa; cursor:pointer; font-size:16px; padding:0 6px;">✕</button>
+      <span class="install-banner-icon">📲</span>
+      <div class="install-banner-text">
+        <strong>Instale o CleanSync</strong>
+        <span>Acesso rápido direto da tela inicial, sem precisar abrir o navegador ✨</span>
+      </div>
+      <button class="btn btn-accent btn-sm" id="btnInstallApp">Instalar</button>
+      <button class="install-banner-close" id="btnDismissInstall" aria-label="Fechar">✕</button>
     `;
-    const installBtn = document.getElementById('btnInstallApp');
-    if (installBtn) installBtn.onclick = async () => {
+    document.body.appendChild(el);
+
+    document.getElementById('btnInstallApp').onclick = async () => {
       if (!deferredInstallPrompt) return;
       deferredInstallPrompt.prompt();
       await deferredInstallPrompt.userChoice;
       deferredInstallPrompt = null;
       showInstall = false;
-      renderBanner();
+      renderInstallBanner();
     };
-    const notifyBtn = document.getElementById('btnActivateNotify');
-    if (notifyBtn) notifyBtn.onclick = () => {
+    document.getElementById('btnDismissInstall').onclick = () => {
+      showInstall = false;
+      renderInstallBanner();
+    };
+  }
+
+  /* ---------- modal central de notificações ---------- */
+  function renderNotifyModal(){
+    let el = document.getElementById('notifyOverlay');
+    if (!showNotifyModal) { if (el) el.remove(); return; }
+    if (el) return;
+
+    el = document.createElement('div');
+    el.id = 'notifyOverlay';
+    el.className = 'notify-overlay';
+    el.innerHTML = `
+      <div class="notify-modal">
+        <div class="notify-emoji">🔔</div>
+        <h3>Não perca nenhuma novidade!</h3>
+        <p>Ative as notificações e saiba na hora quando uma tarefa for criada, iniciada ou concluída. 🧹✨</p>
+        <div class="notify-actions">
+          <button class="btn btn-accent" id="btnActivateNotify">✅ Permitir notificações</button>
+          <button class="btn btn-ghost" id="btnDismissNotify">Agora não</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(el);
+
+    document.getElementById('btnActivateNotify').onclick = () => {
       if (window.OneSignalDeferred) {
         window.OneSignalDeferred.push(function(OneSignal){ OneSignal.Slidedown.promptPush(); });
       }
-      showNotify = false;
-      renderBanner();
+      showNotifyModal = false;
+      renderNotifyModal();
     };
-    document.getElementById('btnDismissBanner').onclick = () => { el.remove(); };
+    document.getElementById('btnDismissNotify').onclick = () => {
+      sessionStorage.setItem('cleansync_notify_dismissed', '1');
+      showNotifyModal = false;
+      renderNotifyModal();
+    };
   }
 
-  renderBanner();
+  renderInstallBanner();
   // o evento beforeinstallprompt pode chegar um instante depois do load
-  setTimeout(renderBanner, 800);
+  setTimeout(renderInstallBanner, 800);
+
+  // um pequeno respiro antes do modal de notificação aparecer, pra não
+  // assustar a pessoa assim que a página termina de carregar
+  if (showNotifyModal) setTimeout(renderNotifyModal, 1000);
 }
+
 
 /* ---------- snackbar ---------- */
 function showSnackbar(msg){
@@ -285,17 +331,50 @@ function attachTimers(list){
   });
 }
 
+/* ---------- ações exclusivas do administrador ----------
+   Mexem direto na tabela cleaning_requests (mesma tabela que
+   cliente/profissional já usam), então dependem das mesmas
+   políticas de RLS que já permitem escrita nessa tabela.
+   Depois de agir, tenta recarregar a tela chamando a função de
+   reload da própria página (reloadTasks em profissional.html,
+   reloadRequests em cliente.html) — o que existir no escopo global. */
+function _adminReload(){
+  if (typeof reloadTasks === 'function') reloadTasks();
+  else if (typeof reloadRequests === 'function') reloadRequests();
+}
+
+async function adminEditPrice(id, currentPrice){
+  const input = prompt('Novo valor (em CHF):', currentPrice);
+  if (input === null) return;
+  const parsed = parseFloat(String(input).replace(',', '.'));
+  if (isNaN(parsed) || parsed < 0) return alert('Digite um valor numérico válido.');
+
+  const { error } = await sb.from('cleaning_requests').update({ price: parsed }).eq('id', id);
+  if (error) return alert('Erro ao atualizar valor: ' + error.message);
+  showSnackbar('💰 Valor atualizado para ' + parsed + ' CHF!');
+  _adminReload();
+}
+
+async function adminDeleteTask(id, label){
+  if (!confirm(`Excluir permanentemente a tarefa "${label}"? Isso não pode ser desfeito.`)) return;
+
+  const { error } = await sb.from('cleaning_requests').delete().eq('id', id);
+  if (error) return alert('Erro ao excluir: ' + error.message);
+  showSnackbar('🗑️ Tarefa excluída.');
+  _adminReload();
+}
+
 /* ---------- cartão de tarefa (compartilhado entre cliente/profissional) ---------- */
 function renderTaskCard(req, mode){
   let timerHtml = '';
   if (req.status === 'in-progress' && req.work_start) {
     timerHtml = `<div class="timer-box">
       <div class="timer-display" data-timer-start="${req.work_start}">${getElapsedTime(req.work_start)}</div>
-      ${mode === 'cleaner'
+      ${mode === 'cleaner' || mode === 'admin'
         ? `<div class="timer-controls"><button class="btn btn-danger btn-lg" onclick="stopTimer('${req.id}')">⏹ Finalizar trabalho</button></div>`
         : `<p style="font-size:12.5px; color:var(--info); margin-top:8px;">Trabalho em andamento…</p>`}
     </div>`;
-  } else if (req.status === 'pending' && mode === 'cleaner') {
+  } else if (req.status === 'pending' && (mode === 'cleaner' || mode === 'admin')) {
     timerHtml = `<div class="timer-box">
       <p style="font-size:12.5px; color:var(--muted); margin-bottom:12px;">Aguardando início do trabalho</p>
       <div class="timer-controls"><button class="btn btn-success btn-lg" onclick="startTimer('${req.id}')">▶ Iniciar trabalho</button></div>
@@ -311,7 +390,7 @@ function renderTaskCard(req, mode){
   }
 
   let checklistHtml = '';
-  if (mode === 'cleaner') {
+  if (mode === 'cleaner' || mode === 'admin') {
     const total = (req.checklist || []).length;
     const done = (req.checklist || []).filter(i => i.done).length;
     checklistHtml = total ? `
@@ -353,8 +432,14 @@ function renderTaskCard(req, mode){
       </div>
     </div>`;
   }
-  if (mode === 'cleaner' && req.status !== 'completed') {
+  if ((mode === 'cleaner' || mode === 'admin') && req.status !== 'completed') {
     actionsHtml += `<div class="task-actions"><button class="btn btn-success" onclick="completeTask('${req.id}')">✅ Marcar como concluída</button></div>`;
+  }
+  if (mode === 'admin') {
+    actionsHtml += `<div class="task-actions">
+      <button class="btn btn-outline" onclick="adminEditPrice('${req.id}', ${Number(req.price) || 0})">💰 Editar valor</button>
+      <button class="btn btn-danger" onclick="adminDeleteTask('${req.id}', '${escapeHtml(req.ref_code || req.address || '')}')">🗑️ Excluir tarefa</button>
+    </div>`;
   }
 
   const statusLabel = req.status === 'pending' ? 'Pendente' : req.status === 'in-progress' ? 'Em andamento' : 'Concluída';
@@ -377,7 +462,7 @@ function renderTaskCard(req, mode){
       <div class="info-item"><div class="label">Estadia</div><div class="value">${req.stay_duration} dias</div></div>
       <div class="info-item"><div class="label">Hóspedes</div><div class="value">${req.guest_count}</div></div>
       <div class="info-item"><div class="label">Lavagem</div><div class="value">${req.laundry_service ? '✅ Sim' : '❌ Não'}</div></div>
-      ${mode === 'cleaner' ? `<div class="info-item"><div class="label">Cliente</div><div class="value">${escapeHtml(req.client_name)}</div></div>` : ''}
+      ${(mode === 'cleaner' || mode === 'admin') ? `<div class="info-item"><div class="label">Cliente</div><div class="value">${escapeHtml(req.client_name)}</div></div>` : ''}
     </div>
     ${req.notes ? `<div class="task-notes"><strong>Obs:</strong> ${escapeHtml(req.notes)}</div>` : ''}
     ${timerHtml}
