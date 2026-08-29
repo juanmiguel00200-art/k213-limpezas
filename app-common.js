@@ -149,6 +149,17 @@ function startRealtime(onChange){
     .subscribe();
 }
 
+/* ---------- debounce ----------
+   Evita recarregar a lista duas vezes seguidas quando uma ação
+   do usuário e o evento de tempo real chegam quase juntos. */
+function debounce(fn, wait = 250){
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
 /* ---------- snackbar ---------- */
 function showSnackbar(msg){
   let el = document.getElementById('snackbar');
