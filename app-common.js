@@ -1,5 +1,5 @@
 /* ============================================================
-   K213 — núcleo compartilhado (config, auth, utilitários)
+   CleanSync — núcleo compartilhado (config, auth, utilitários)
    Carregado por todas as páginas via <script src="app-common.js">
 
    Login por USUÁRIO+SENHA própria (tabela "usuarios"), sem
@@ -21,7 +21,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
 
-const K213_CONFIGURED = true;
+const APP_CONFIGURED = true;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let realtimeChannel = null;
@@ -68,43 +68,39 @@ function clearSession(){
 
 /* cria conta na tabela "usuarios" */
 async function criarConta(name, username, password, role){
-  const { data: existing } = await sb.from('usuarios').select('id').eq('username', username).maybeSingle();
-  if (existing) throw new Error('Esse usuário já existe. Escolha outro nome de usuário.');
-
   const password_hash = await sha256Hex(password);
   const recovery_code = generateRecoveryCode();
 
-  const { data, error } = await sb.from('usuarios')
-    .insert({ name, username, password_hash, recovery_code, role })
-    .select().single();
-  if (error) throw error;
-
-  return { user: data, recovery_code };
+  const { data, error } = await sb.rpc('k213_criar_conta', {
+    p_name: name, p_username: username, p_password_hash: password_hash,
+    p_recovery_code: recovery_code, p_role: role
+  });
+  if (error) throw new Error(error.message.includes('já existe') ? 'Esse usuário já existe. Escolha outro nome de usuário.' : error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  return { user: row, recovery_code: row.recovery_code };
 }
 
 /* login por usuário + senha */
 async function entrarComSenha(username, password){
   const password_hash = await sha256Hex(password);
-  const { data, error } = await sb.from('usuarios')
-    .select('*').eq('username', username).eq('password_hash', password_hash).maybeSingle();
+  const { data, error } = await sb.rpc('k213_login', { p_username: username, p_password_hash: password_hash });
   if (error) throw error;
-  if (!data) throw new Error('Usuário ou senha incorretos.');
-  return data;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Usuário ou senha incorretos.');
+  return row;
 }
 
 /* redefine a senha usando o código de recuperação, e gera um código novo */
 async function redefinirSenha(username, recoveryCode, newPassword){
-  const { data, error } = await sb.from('usuarios')
-    .select('*').eq('username', username).eq('recovery_code', recoveryCode.toUpperCase()).maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error('Usuário ou código de recuperação incorretos.');
-
   const newHash = await sha256Hex(newPassword);
   const newCode = generateRecoveryCode();
-  const { error: updErr } = await sb.from('usuarios')
-    .update({ password_hash: newHash, recovery_code: newCode }).eq('id', data.id);
-  if (updErr) throw updErr;
-
+  const { data, error } = await sb.rpc('k213_redefinir_senha', {
+    p_username: username, p_recovery_code: recoveryCode.toUpperCase(),
+    p_new_password_hash: newHash, p_new_recovery_code: newCode
+  });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || !row.ok) throw new Error('Usuário ou código de recuperação incorretos.');
   return newCode;
 }
 
@@ -113,11 +109,12 @@ async function redefinirSenha(username, recoveryCode, newPassword){
    Se não estiver logado -> manda para index.html.
    Se o papel não bater -> manda para a página certa dele. */
 async function requireRole(requiredRole){
-  if (!K213_CONFIGURED) { renderSetupWarning(); return null; }
+  if (!APP_CONFIGURED) { renderSetupWarning(); return null; }
   const session = getSession();
   if (!session) { window.location.href = 'index.html'; return null; }
-  if (session.role !== requiredRole) {
-    window.location.href = session.role === 'profissional' ? 'profissional.html' : 'cliente.html';
+  // admin pode ver qualquer página; as outras páginas exigem o papel exato
+  if (session.role !== requiredRole && session.role !== 'admin') {
+    window.location.href = session.role === 'admin' ? 'admin.html' : session.role === 'profissional' ? 'profissional.html' : 'cliente.html';
     return null;
   }
   paintWho({ name: session.name, role: session.role });
@@ -129,7 +126,9 @@ async function requireRole(requiredRole){
 
 function paintWho(profile){
   const nameEl = document.getElementById('topWhoName');
-  if (nameEl) nameEl.textContent = profile.name + ' · ' + (profile.role === 'profissional' ? 'Profissional' : 'Cliente');
+  if (nameEl) nameEl.textContent = profile.name + ' · ' + (profile.role === 'admin' ? 'Administrador' : profile.role === 'profissional' ? 'Profissional' : 'Cliente');
+  const adminLink = document.getElementById('navAdminLink');
+  if (adminLink && profile.role === 'admin') adminLink.style.display = '';
 }
 
 function logout(){
@@ -158,6 +157,71 @@ function debounce(fn, wait = 250){
     clearTimeout(t);
     t = setTimeout(() => fn(...args), wait);
   };
+}
+
+/* ---------- banner de instalar app / ativar notificações ----------
+   Os navegadores escondem esses avisos de propósito e demoram a
+   mostrar. Isso cria um banner visível, sob nosso controle. */
+function setupInstallAndNotifyBanner(){
+  let deferredInstallPrompt = null;
+  let showInstall = false;
+  let showNotify = false;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showInstall = true;
+    renderBanner();
+  });
+  window.addEventListener('appinstalled', () => {
+    showInstall = false;
+    renderBanner();
+  });
+
+  // se o app já roda instalado (modo standalone), não tem por que oferecer instalar
+  if (window.matchMedia('(display-mode: standalone)').matches) showInstall = false;
+
+  if ('Notification' in window && Notification.permission === 'default') {
+    showNotify = true;
+  }
+
+  function renderBanner(){
+    let el = document.getElementById('installNotifyBanner');
+    if (!showInstall && !showNotify) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'installNotifyBanner';
+      el.style.cssText = 'position:sticky; top:0; z-index:100; background:var(--text); color:#fff; padding:10px 16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:center; font-size:12.5px; border-bottom:3px solid var(--accent);';
+      document.body.prepend(el);
+    }
+    el.innerHTML = `
+      ${showInstall ? '<button class="btn btn-accent" id="btnInstallApp" style="clip-path:none;">📲 Instalar app</button>' : ''}
+      ${showNotify ? '<button class="btn btn-outline" id="btnActivateNotify" style="clip-path:none; background:transparent; color:#fff; border-color:rgba(255,255,255,.4);">🔔 Ativar notificações</button>' : ''}
+      <button id="btnDismissBanner" style="background:transparent; border:none; color:#aaa; cursor:pointer; font-size:16px; padding:0 6px;">✕</button>
+    `;
+    const installBtn = document.getElementById('btnInstallApp');
+    if (installBtn) installBtn.onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      showInstall = false;
+      renderBanner();
+    };
+    const notifyBtn = document.getElementById('btnActivateNotify');
+    if (notifyBtn) notifyBtn.onclick = () => {
+      if (window.OneSignalDeferred) {
+        window.OneSignalDeferred.push(function(OneSignal){ OneSignal.Slidedown.promptPush(); });
+      }
+      showNotify = false;
+      renderBanner();
+    };
+    document.getElementById('btnDismissBanner').onclick = () => { el.remove(); };
+  }
+
+  renderBanner();
+  // o evento beforeinstallprompt pode chegar um instante depois do load
+  setTimeout(renderBanner, 800);
 }
 
 /* ---------- snackbar ---------- */
@@ -272,10 +336,21 @@ function renderTaskCard(req, mode){
   }
 
   let actionsHtml = '';
+  let editFormHtml = '';
   if (mode === 'client' && req.status === 'pending') {
     actionsHtml = `<div class="task-actions">
-      <button class="btn btn-outline" onclick="editRequest('${req.id}')">Editar</button>
+      <button class="btn btn-outline" onclick="toggleEditForm('${req.id}')">Editar</button>
       <button class="btn btn-danger" onclick="cancelRequest('${req.id}')">Cancelar</button>
+    </div>`;
+    editFormHtml = `<div class="task-edit-form" id="editForm_${req.id}" style="display:none;">
+      <div class="field-row">
+        <div class="field"><label>Data</label><input type="date" id="editDate_${req.id}" value="${req.date || ''}"></div>
+        <div class="field"><label>Horário</label><input type="time" id="editTime_${req.id}" value="${req.time ? req.time.slice(0,5) : ''}"></div>
+      </div>
+      <div class="edit-actions">
+        <button class="btn btn-outline" onclick="toggleEditForm('${req.id}')">Cancelar</button>
+        <button class="btn btn-accent" onclick="saveEditRequest('${req.id}')">Salvar alterações</button>
+      </div>
     </div>`;
   }
   if (mode === 'cleaner' && req.status !== 'completed') {
@@ -309,5 +384,6 @@ function renderTaskCard(req, mode){
     ${checklistHtml}
     ${mode === 'client' ? photosHtml : ''}
     ${actionsHtml}
+    ${editFormHtml}
   </div>`;
 }
