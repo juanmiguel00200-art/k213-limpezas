@@ -6,7 +6,9 @@
 <title>K213 · Painel do Profissional</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15151A">
+<link rel="stylesheet" href="style.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -60,7 +62,7 @@
   <div id="cleanerTasks"></div>
 </div>
 
-<script src="app-common.js?v=3"></script>
+<script src="app-common.js?v=4"></script>
 <script>
 let currentUser = null;
 let currentProfile = null;
@@ -76,15 +78,19 @@ let currentProfile = null;
 
   loadCleanerTasks();
   loadChecklistEditor();
-  startRealtime(() => loadCleanerTasks());
+  startRealtime(() => reloadTasks());
 })();
+
+// recarga "suave": junta ações do usuário + evento de tempo real
+// numa só atualização, sem piscar a tela duas vezes
+const reloadTasks = debounce(loadCleanerTasks, 300);
 
 // ------------------------------------------------------------
 // TAREFAS
 // ------------------------------------------------------------
 async function loadCleanerTasks(){
   const container = document.getElementById('cleanerTasks');
-  container.innerHTML = '<div class="spinner"></div>';
+  if (!container.dataset.loaded) container.innerHTML = '<div class="spinner"></div>';
 
   const filterStatus = document.getElementById('cleanerFilterStatus').value;
   const filterDate = document.getElementById('cleanerFilterDate').value;
@@ -98,6 +104,7 @@ async function loadCleanerTasks(){
   if (!tasks.length) { container.innerHTML = '<div class="empty">Nenhuma tarefa encontrada.</div>'; return; }
 
   container.innerHTML = tasks.map(req => renderTaskCard(req, 'cleaner')).join('');
+  container.dataset.loaded = '1';
   attachTimers(tasks);
 }
 
@@ -110,7 +117,7 @@ async function startTimer(id){
     .eq('id', id);
   if (error) return alert('Erro: ' + error.message);
   showSnackbar('⏱️ Trabalho iniciado! O tempo está contando automaticamente.');
-  loadCleanerTasks();
+  reloadTasks();
 }
 
 async function stopTimer(id){
@@ -119,19 +126,34 @@ async function stopTimer(id){
     .eq('id', id);
   if (error) return alert('Erro: ' + error.message);
   showSnackbar('⏹️ Trabalho finalizado! Marque como concluída quando estiver tudo certo.');
-  loadCleanerTasks();
+  reloadTasks();
 }
 
 // ------------------------------------------------------------
 // CHECKLIST DA TAREFA — marcar/desmarcar itens
 // ------------------------------------------------------------
 async function toggleChecklistItem(id, itemId){
+  // marca visualmente na hora, sem esperar o banco responder
+  const checkboxEl = document.getElementById(`ck_${itemId}_${id}`);
+  if (checkboxEl) {
+    checkboxEl.checked = !checkboxEl.checked;
+    const itemDiv = checkboxEl.closest('.checklist-item');
+    if (itemDiv) itemDiv.classList.toggle('done', checkboxEl.checked);
+    const taskEl = checkboxEl.closest('.task');
+    if (taskEl) {
+      const boxes = taskEl.querySelectorAll('.checklist-item input[type=checkbox]');
+      const doneCount = taskEl.querySelectorAll('.checklist-item input[type=checkbox]:checked').length;
+      const progressEl = taskEl.querySelector('.checklist-progress');
+      if (progressEl) progressEl.textContent = `${doneCount} / ${boxes.length} concluídos`;
+    }
+  }
+
   const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('checklist').eq('id', id).single();
-  if (fetchErr) return alert('Erro: ' + fetchErr.message);
+  if (fetchErr) { reloadTasks(); return alert('Erro: ' + fetchErr.message); }
   const checklist = (row.checklist || []).map(item => item.id === itemId ? { ...item, done: !item.done } : item);
   const { error } = await sb.from('cleaning_requests').update({ checklist }).eq('id', id);
-  if (error) return alert('Erro: ' + error.message);
-  loadCleanerTasks();
+  if (error) { reloadTasks(); return alert('Erro: ' + error.message); }
+  reloadTasks();
 }
 
 async function completeTask(id){
@@ -144,7 +166,7 @@ async function completeTask(id){
   const { error } = await sb.from('cleaning_requests').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
   if (error) return alert('Erro: ' + error.message);
   showSnackbar('✅ Tarefa concluída!');
-  loadCleanerTasks();
+  reloadTasks();
 }
 
 // ------------------------------------------------------------
@@ -169,7 +191,7 @@ async function uploadPhotos(id, input){
     const { error: updErr } = await sb.from('cleaning_requests').update({ photos: allPhotos }).eq('id', id);
     if (updErr) throw updErr;
     showSnackbar('📸 Fotos enviadas!');
-    loadCleanerTasks();
+    reloadTasks();
   } catch (err) {
     alert('Erro ao enviar fotos: ' + err.message);
   }
@@ -210,6 +232,11 @@ async function updateChecklistItemLabel(itemId, newLabel){
   const items = (await getDefaultChecklist()).map(i => i.id === itemId ? { ...i, label: newLabel } : i);
   const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
   if (error) return alert('Erro: ' + error.message);
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js').catch(console.error);
 }
 </script>
 </body>
