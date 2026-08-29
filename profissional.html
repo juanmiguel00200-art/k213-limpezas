@@ -3,287 +3,1683 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
 <title>CleanSync · Painel do Profissional</title>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=10">
+
+<link rel="stylesheet" href="style.css?v=11">
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+
 <script>
-  window.OneSignalDeferred = window.OneSignalDeferred || [];
-  OneSignalDeferred.push(async function(OneSignal) {
-    await OneSignal.init({
-      appId: "6ece3179-2303-4614-a752-18378c461644",
-      serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
-      serviceWorkerParam: { scope: "/onesignal/" }
-    });
+window.OneSignalDeferred = window.OneSignalDeferred || [];
+
+OneSignalDeferred.push(async function(OneSignal) {
+
+  await OneSignal.init({
+    appId: "6ece3179-2303-4614-a752-18378c461644",
+
+    serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
+
+    serviceWorkerParam: {
+      scope: "/onesignal/"
+    }
   });
+
+});
 </script>
+
 </head>
+
 <body>
 
 <div id="snackbar" class="snackbar"></div>
 
+
+<!-- ============================================================
+     TOPBAR
+============================================================ -->
+
 <div class="topbar">
+
   <div class="brand">
+
     <div class="mark"></div>
-    <div><div class="name">CleanSync</div><div class="sub">PAINEL DO PROFISSIONAL</div></div>
+
+    <div>
+      <div class="name">CleanSync</div>
+      <div class="sub">PAINEL DO PROFISSIONAL</div>
+    </div>
+
   </div>
+
+
   <div class="who">
-    <span class="sync-dot"><span class="dot"></span>SINCRONIZADO</span>
+
+    <span class="sync-dot">
+      <span class="dot"></span>
+      SINCRONIZADO
+    </span>
+
+
     <nav>
-      <a href="profissional.html" class="active">Tarefas</a>
-      <a href="relatorios.html">Relatórios</a>
-      <a href="admin.html" id="navAdminLink" style="display:none;">Usuários</a>
+
+      <a href="profissional.html" class="active">
+        Tarefas
+      </a>
+
+      <a href="relatorios.html">
+        Relatórios
+      </a>
+
+      <a
+        href="admin.html"
+        id="navAdminLink"
+        style="display:none;"
+      >
+        Usuários
+      </a>
+
     </nav>
+
+
     <span id="topWhoName"></span>
-    <button class="btn btn-ghost" onclick="logout()">Sair</button>
+
+
+    <button
+      class="btn btn-ghost"
+      onclick="logout()"
+    >
+      Sair
+    </button>
+
   </div>
+
 </div>
+
+
+
+<!-- ============================================================
+     CONTEÚDO
+============================================================ -->
 
 <div class="wrap">
+
+
+  <!-- HERO -->
+
   <div class="page-hero">
-    <div class="eyebrow">COORDENAÇÃO DE LIMPEZA</div>
-    <h1>Tarefas atribuídas</h1>
-    <p class="lede">Inicie o cronômetro, marque o checklist e envie fotos ao concluir.</p>
+
+    <div class="eyebrow">
+      COORDENAÇÃO DE LIMPEZA
+    </div>
+
+    <h1>
+      Tarefas atribuídas
+    </h1>
+
+    <p class="lede">
+      Inicie o cronômetro, marque o checklist e envie fotos ao concluir.
+    </p>
+
   </div>
+
+
+
+  <!-- ============================================================
+       CHECKLIST PADRÃO
+  ============================================================ -->
 
   <details class="card">
-    <summary class="section-label" style="cursor:pointer; list-style:none; display:flex; align-items:center; justify-content:space-between; border-bottom:none; margin-bottom:0;">
-      <span>⚙️ Configurar checklist padrão</span>
-      <span style="font-size:11px; color:var(--muted);">clique para abrir</span>
+
+    <summary
+      class="section-label"
+      style="
+        cursor:pointer;
+        list-style:none;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        border-bottom:none;
+        margin-bottom:0;
+      "
+    >
+
+      <span>
+        ⚙️ Configurar checklist padrão
+      </span>
+
+      <span
+        style="
+          font-size:11px;
+          color:var(--muted);
+        "
+      >
+        clique para abrir
+      </span>
+
     </summary>
-    <div style="margin-top:16px; padding-top:16px; border-top:1px solid var(--border);">
+
+
+    <div
+      style="
+        margin-top:16px;
+        padding-top:16px;
+        border-top:1px solid var(--border);
+      "
+    >
+
       <div id="checklistEditor"></div>
-      <div style="display:flex; gap:8px; margin-top:14px;">
-        <button class="btn btn-outline" onclick="addChecklistItem()">+ Adicionar item</button>
+
+
+      <div
+        style="
+          display:flex;
+          gap:8px;
+          margin-top:14px;
+        "
+      >
+
+        <button
+          class="btn btn-outline"
+          onclick="addChecklistItem()"
+        >
+          + Adicionar item
+        </button>
+
       </div>
-      <p style="margin-top:12px; font-size:12px; color:var(--muted);">O item de lavagem de roupa é especial: quando marcado numa requisição, o valor sobe automaticamente para 50 CHF.</p>
+
+
+      <p
+        style="
+          margin-top:12px;
+          font-size:12px;
+          color:var(--muted);
+        "
+      >
+        O item de lavagem de roupa é especial:
+        quando marcado numa requisição,
+        o valor sobe automaticamente para 50 CHF.
+      </p>
+
     </div>
+
   </details>
 
-  <div class="stats-grid" id="cleanerStatsGrid"></div>
-  <div class="section-label">Tarefas</div>
-  <div class="filter-bar">
-    <span class="flabel">Status</span>
-    <select id="cleanerFilterStatus">
-      <option value="all">Todos</option>
-      <option value="pending">Pendentes</option>
-      <option value="in-progress">Em andamento</option>
-      <option value="completed">Concluídas</option>
-    </select>
-    <span class="flabel">Data</span>
-    <input type="date" id="cleanerFilterDate" />
+
+
+  <!-- ============================================================
+       ESTATÍSTICAS
+  ============================================================ -->
+
+  <div
+    class="stats-grid"
+    id="cleanerStatsGrid"
+  ></div>
+
+
+
+  <!-- ============================================================
+       TAREFAS
+  ============================================================ -->
+
+  <div class="section-label">
+    Tarefas
   </div>
+
+
+  <div class="filter-bar">
+
+    <span class="flabel">
+      Status
+    </span>
+
+
+    <select id="cleanerFilterStatus">
+
+      <option value="all">
+        Todos
+      </option>
+
+      <option value="pending">
+        Pendentes
+      </option>
+
+      <option value="in-progress">
+        Em andamento
+      </option>
+
+      <option value="completed">
+        Concluídas
+      </option>
+
+    </select>
+
+
+    <span class="flabel">
+      Data
+    </span>
+
+
+    <input
+      type="date"
+      id="cleanerFilterDate"
+    />
+
+  </div>
+
+
   <div id="cleanerTasks"></div>
+
 </div>
 
-<script src="app-common.js?v=10"></script>
+
+
+<!-- ============================================================
+     APP COMMON
+============================================================ -->
+
+<script src="app-common.js?v=11"></script>
+
+
+
 <script>
+
+/* ============================================================
+   ESTADO
+============================================================ */
+
 let currentUser = null;
 let currentProfile = null;
 
+
+
+/* ============================================================
+   INICIALIZAÇÃO
+============================================================ */
+
 (async function init(){
+
   const ctx = await requireRole('profissional');
+
   if (!ctx) return;
+
+
   currentUser = ctx.user;
   currentProfile = ctx.profile;
 
+
+  /* ----------------------------------------------------------
+     ADMIN
+  ---------------------------------------------------------- */
+
   if (currentProfile.role === 'admin') {
-    document.querySelector('.page-hero .lede').insertAdjacentHTML('afterend',
-      '<p class="lede" style="margin-top:6px; color:var(--pink-light);">Modo administrador: você também pode editar o valor ou excluir qualquer tarefa abaixo.</p>');
+
+    const hero = document.querySelector(
+      '.page-hero .lede'
+    );
+
+    if (hero) {
+
+      hero.insertAdjacentHTML(
+        'afterend',
+
+        `
+        <p
+          class="lede"
+          style="
+            margin-top:6px;
+            color:var(--pink-light);
+          "
+        >
+          Modo administrador:
+          você também pode editar o valor
+          ou excluir qualquer tarefa abaixo.
+        </p>
+        `
+      );
+
+    }
+
   }
 
-  document.getElementById('cleanerFilterStatus').addEventListener('change', loadCleanerTasks);
-  document.getElementById('cleanerFilterDate').addEventListener('change', loadCleanerTasks);
 
-  loadCleanerTasks();
-  loadChecklistEditor();
+  /* ----------------------------------------------------------
+     FILTROS
+  ---------------------------------------------------------- */
+
+  document
+    .getElementById('cleanerFilterStatus')
+    .addEventListener(
+      'change',
+      loadCleanerTasks
+    );
+
+
+  document
+    .getElementById('cleanerFilterDate')
+    .addEventListener(
+      'change',
+      loadCleanerTasks
+    );
+
+
+  /* ----------------------------------------------------------
+     CARREGAMENTO INICIAL
+  ---------------------------------------------------------- */
+
+  await loadCleanerTasks();
+
+  await loadChecklistEditor();
+
+
+  /* ----------------------------------------------------------
+     REALTIME
+  ---------------------------------------------------------- */
+
   startRealtime(() => reloadTasks());
+
 })();
 
-// recarga "suave": junta ações do usuário + evento de tempo real
-// numa só atualização, sem piscar a tela duas vezes
-const reloadTasks = debounce(loadCleanerTasks, 300);
 
-// ------------------------------------------------------------
-// TAREFAS
-// ------------------------------------------------------------
+
+/* ============================================================
+   RELOAD SUAVE
+============================================================ */
+
+const reloadTasks = debounce(
+  loadCleanerTasks,
+  300
+);
+
+
+
+/* ============================================================
+   TAREFAS
+============================================================ */
+
 async function loadCleanerTasks(){
-  const container = document.getElementById('cleanerTasks');
-  if (!container.dataset.loaded) container.innerHTML = '<div class="spinner"></div>';
 
-  const filterStatus = document.getElementById('cleanerFilterStatus').value;
-  const filterDate = document.getElementById('cleanerFilterDate').value;
+  const container =
+    document.getElementById(
+      'cleanerTasks'
+    );
 
-  let query = sb.from('cleaning_requests').select('*').order('created_at', { ascending: false });
-  if (filterStatus !== 'all') query = query.eq('status', filterStatus);
-  if (filterDate) query = query.eq('date', filterDate);
 
-  const { data: tasks, error } = await query;
-  if (error) { container.innerHTML = '<div class="empty">Erro ao carregar: ' + error.message + '</div>'; return; }
-  if (!tasks.length) { container.innerHTML = '<div class="empty">Nenhuma tarefa encontrada.</div>'; return; }
+  if (!container.dataset.loaded) {
 
-  const cardMode = (currentProfile && currentProfile.role === 'admin') ? 'admin' : 'cleaner';
-  container.innerHTML = tasks.map(req => renderTaskCard(req, cardMode)).join('');
+    container.innerHTML =
+      '<div class="spinner"></div>';
+
+  }
+
+
+  const filterStatus =
+    document.getElementById(
+      'cleanerFilterStatus'
+    ).value;
+
+
+  const filterDate =
+    document.getElementById(
+      'cleanerFilterDate'
+    ).value;
+
+
+  let query = sb
+    .from('cleaning_requests')
+    .select('*')
+    .order(
+      'created_at',
+      {
+        ascending:false
+      }
+    );
+
+
+  if (filterStatus !== 'all') {
+
+    query = query.eq(
+      'status',
+      filterStatus
+    );
+
+  }
+
+
+  if (filterDate) {
+
+    query = query.eq(
+      'date',
+      filterDate
+    );
+
+  }
+
+
+  const {
+    data: tasks,
+    error
+  } = await query;
+
+
+  if (error) {
+
+    container.innerHTML =
+      `
+      <div class="empty">
+        Erro ao carregar:
+        ${escapeHtml(error.message)}
+      </div>
+      `;
+
+    return;
+
+  }
+
+
+  if (!tasks || !tasks.length) {
+
+    container.innerHTML =
+      `
+      <div class="empty">
+        Nenhuma tarefa encontrada.
+      </div>
+      `;
+
+    renderCleanerStats(
+      [],
+      filterStatus
+    );
+
+    return;
+
+  }
+
+
+  const cardMode =
+    (
+      currentProfile &&
+      currentProfile.role === 'admin'
+    )
+      ? 'admin'
+      : 'cleaner';
+
+
+  /*
+    renderTaskCard continua sendo
+    fornecido pelo app-common.js
+  */
+
+  container.innerHTML =
+    tasks
+      .map(req =>
+        renderTaskCard(
+          req,
+          cardMode
+        )
+      )
+      .join('');
+
+
   container.dataset.loaded = '1';
+
+
   attachTimers(tasks);
-  renderCleanerStats(tasks, filterStatus);
+
+
+  renderCleanerStats(
+    tasks,
+    filterStatus
+  );
+
 }
 
-function renderCleanerStats(tasks, filterStatus){
-  const grid = document.getElementById('cleanerStatsGrid');
-  if (filterStatus !== 'all') return; // mantém o total geral em vez de números parciais do filtro
-  const pending = tasks.filter(t => t.status === 'pending').length;
-  const inProgress = tasks.filter(t => t.status === 'in-progress').length;
-  const completed = tasks.filter(t => t.status === 'completed').length;
+
+
+/* ============================================================
+   ESTATÍSTICAS
+============================================================ */
+
+function renderCleanerStats(
+  tasks,
+  filterStatus
+){
+
+  const grid =
+    document.getElementById(
+      'cleanerStatsGrid'
+    );
+
+
+  /*
+    Quando existe filtro,
+    não alteramos os números gerais.
+  */
+
+  if (filterStatus !== 'all') {
+
+    return;
+
+  }
+
+
+  const pending =
+    tasks.filter(
+      t => t.status === 'pending'
+    ).length;
+
+
+  const inProgress =
+    tasks.filter(
+      t => t.status === 'in-progress'
+    ).length;
+
+
+  const completed =
+    tasks.filter(
+      t => t.status === 'completed'
+    ).length;
+
+
   grid.innerHTML = `
-    <div class="stat"><div class="n">${tasks.length}</div><div class="l">Total</div></div>
-    <div class="stat"><div class="n">${pending}</div><div class="l">Pendentes</div></div>
-    <div class="stat"><div class="n">${inProgress}</div><div class="l">Em andamento</div></div>
-    <div class="stat"><div class="n">${completed}</div><div class="l">Concluídas</div></div>
+
+    <div class="stat">
+
+      <div class="n">
+        ${tasks.length}
+      </div>
+
+      <div class="l">
+        Total
+      </div>
+
+    </div>
+
+
+    <div class="stat">
+
+      <div class="n">
+        ${pending}
+      </div>
+
+      <div class="l">
+        Pendentes
+      </div>
+
+    </div>
+
+
+    <div class="stat">
+
+      <div class="n">
+        ${inProgress}
+      </div>
+
+      <div class="l">
+        Em andamento
+      </div>
+
+    </div>
+
+
+    <div class="stat">
+
+      <div class="n">
+        ${completed}
+      </div>
+
+      <div class="l">
+        Concluídas
+      </div>
+
+    </div>
+
   `;
+
 }
 
-// ------------------------------------------------------------
-// CRONÔMETRO — botão automático de contagem das horas
-// ------------------------------------------------------------
+
+
+/* ============================================================
+   CRONÔMETRO
+============================================================ */
+
 async function startTimer(id){
-  const { error } = await sb.from('cleaning_requests')
-    .update({ status: 'in-progress', work_start: new Date().toISOString() })
-    .eq('id', id);
-  if (error) return alert('Erro: ' + error.message);
-  showSnackbar('⏱️ Trabalho iniciado! O tempo está contando automaticamente.');
+
+  const {
+    error
+  } = await sb
+    .from('cleaning_requests')
+    .update({
+
+      status:
+        'in-progress',
+
+      work_start:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro: ' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  showSnackbar(
+    '⏱️ Trabalho iniciado! O tempo está contando automaticamente.'
+  );
+
+
   reloadTasks();
+
 }
+
+
 
 async function stopTimer(id){
-  const { error } = await sb.from('cleaning_requests')
-    .update({ work_end: new Date().toISOString() })
-    .eq('id', id);
-  if (error) return alert('Erro: ' + error.message);
-  showSnackbar('⏹️ Trabalho finalizado! Marque como concluída quando estiver tudo certo.');
-  reloadTasks();
-}
 
-// ------------------------------------------------------------
-// CHECKLIST DA TAREFA — marcar/desmarcar itens
-// ------------------------------------------------------------
-async function toggleChecklistItem(id, itemId){
-  // marca visualmente na hora, sem esperar o banco responder
-  const checkboxEl = document.getElementById(`ck_${itemId}_${id}`);
-  if (checkboxEl) {
-    checkboxEl.checked = !checkboxEl.checked;
-    const itemDiv = checkboxEl.closest('.checklist-item');
-    if (itemDiv) {
-      itemDiv.classList.toggle('done', checkboxEl.checked);
-      if (checkboxEl.checked) {
-        itemDiv.classList.add('completing');
-        itemDiv.addEventListener('animationend', () => itemDiv.classList.remove('completing'), { once: true });
-      }
-    }
-    const taskEl = checkboxEl.closest('.task');
-    if (taskEl) {
-      const boxes = taskEl.querySelectorAll('.checklist-item input[type=checkbox]');
-      const doneCount = taskEl.querySelectorAll('.checklist-item input[type=checkbox]:checked').length;
-      const progressEl = taskEl.querySelector('.checklist-progress');
-      if (progressEl) progressEl.textContent = `${doneCount} / ${boxes.length} concluídos`;
-    }
+  const {
+    error
+  } = await sb
+    .from('cleaning_requests')
+    .update({
+
+      work_end:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro: ' +
+      error.message
+    );
+
+    return;
+
   }
 
-  const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('checklist').eq('id', id).single();
-  if (fetchErr) { reloadTasks(); return alert('Erro: ' + fetchErr.message); }
-  const checklist = (row.checklist || []).map(item => item.id === itemId ? { ...item, done: !item.done } : item);
-  const { error } = await sb.from('cleaning_requests').update({ checklist }).eq('id', id);
-  if (error) { reloadTasks(); return alert('Erro: ' + error.message); }
+
+  showSnackbar(
+    '⏹️ Trabalho finalizado! Marque como concluída quando estiver tudo certo.'
+  );
+
+
   reloadTasks();
+
 }
+
+
+
+/* ============================================================
+   CHECKLIST
+============================================================ */
+
+async function toggleChecklistItem(
+  id,
+  itemId
+){
+
+  /*
+    Atualização visual imediata
+  */
+
+  const checkboxEl =
+    document.getElementById(
+      `ck_${itemId}_${id}`
+    );
+
+
+  if (checkboxEl) {
+
+    checkboxEl.checked =
+      !checkboxEl.checked;
+
+
+    const itemDiv =
+      checkboxEl.closest(
+        '.checklist-item'
+      );
+
+
+    if (itemDiv) {
+
+      itemDiv.classList.toggle(
+        'done',
+        checkboxEl.checked
+      );
+
+
+      if (checkboxEl.checked) {
+
+        itemDiv.classList.add(
+          'completing'
+        );
+
+
+        itemDiv.addEventListener(
+          'animationend',
+
+          () =>
+            itemDiv.classList.remove(
+              'completing'
+            ),
+
+          {
+            once:true
+          }
+
+        );
+
+      }
+
+    }
+
+
+    const taskEl =
+      checkboxEl.closest(
+        '.task'
+      );
+
+
+    if (taskEl) {
+
+      const boxes =
+        taskEl.querySelectorAll(
+          '.checklist-item input[type=checkbox]'
+        );
+
+
+      const doneCount =
+        taskEl.querySelectorAll(
+          '.checklist-item input[type=checkbox]:checked'
+        ).length;
+
+
+      const progressEl =
+        taskEl.querySelector(
+          '.checklist-progress'
+        );
+
+
+      if (progressEl) {
+
+        progressEl.textContent =
+          `${doneCount} / ${boxes.length} concluídos`;
+
+      }
+
+    }
+
+  }
+
+
+  /*
+    Busca versão atual do checklist
+  */
+
+  const {
+    data: row,
+    error: fetchErr
+  } = await sb
+    .from('cleaning_requests')
+    .select('checklist')
+    .eq(
+      'id',
+      id
+    )
+    .single();
+
+
+  if (fetchErr) {
+
+    reloadTasks();
+
+    alert(
+      'Erro: ' +
+      fetchErr.message
+    );
+
+    return;
+
+  }
+
+
+  const checklist =
+    Array.isArray(row.checklist)
+      ? row.checklist
+      : [];
+
+
+  const updatedChecklist =
+    checklist.map(
+      item =>
+
+        item.id === itemId
+
+          ? {
+              ...item,
+              done: !item.done
+            }
+
+          : item
+    );
+
+
+  const {
+    error
+  } = await sb
+    .from('cleaning_requests')
+    .update({
+
+      checklist:
+        updatedChecklist
+
+    })
+    .eq(
+      'id',
+      id
+    );
+
+
+  if (error) {
+
+    reloadTasks();
+
+    alert(
+      'Erro: ' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
+  reloadTasks();
+
+}
+
+
+
+/* ============================================================
+   ⭐ CONCLUIR TAREFA
+   ============================================================
+
+   NOVO FLUXO:
+
+   1. verifica checklist
+   2. verifica cronômetro
+   3. salva completed
+   4. atualiza interface
+   5. chama Edge Function
+   6. Edge Function envia OneSignal
+   7. Edge Function registra notification
+
+============================================================ */
 
 async function completeTask(id){
-  const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('*').eq('id', id).single();
-  if (fetchErr) return alert('Erro: ' + fetchErr.message);
-  const allDone = row.checklist ? row.checklist.every(i => i.done) : true;
-  if (!allDone && !confirm('Algumas tarefas do checklist não foram concluídas. Continuar?')) return;
-  if (!row.work_start || !row.work_end) return alert('Use o cronômetro (Iniciar/Finalizar trabalho) antes de concluir.');
 
-  const { error } = await sb.from('cleaning_requests').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
-  if (error) return alert('Erro: ' + error.message);
-  showSnackbar('✅ Tarefa concluída!');
-  reloadTasks();
-}
-
-// ------------------------------------------------------------
-// FOTOS
-// ------------------------------------------------------------
-async function uploadPhotos(id, input){
-  const files = Array.from(input.files || []);
-  if (!files.length) return;
-  showSnackbar('📤 Enviando fotos...');
   try {
-    const urls = [];
-    for (const file of files) {
-      const path = `${id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-      const { error: upErr } = await sb.storage.from('cleaning-photos').upload(path, file);
-      if (upErr) throw upErr;
-      const { data } = sb.storage.from('cleaning-photos').getPublicUrl(path);
-      urls.push(data.publicUrl);
+
+
+    /* --------------------------------------------------------
+       1. BUSCA TAREFA
+    -------------------------------------------------------- */
+
+    const {
+      data: row,
+      error: fetchErr
+    } = await sb
+      .from('cleaning_requests')
+      .select('*')
+      .eq(
+        'id',
+        id
+      )
+      .single();
+
+
+    if (fetchErr) {
+
+      alert(
+        'Erro ao carregar tarefa: ' +
+        fetchErr.message
+      );
+
+      return;
+
     }
-    const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('photos').eq('id', id).single();
-    if (fetchErr) throw fetchErr;
-    const allPhotos = [...(row.photos || []), ...urls];
-    const { error: updErr } = await sb.from('cleaning_requests').update({ photos: allPhotos }).eq('id', id);
-    if (updErr) throw updErr;
-    showSnackbar('📸 Fotos enviadas!');
+
+
+    if (!row) {
+
+      alert(
+        'Tarefa não encontrada.'
+      );
+
+      return;
+
+    }
+
+
+
+    /* --------------------------------------------------------
+       2. CHECKLIST
+    -------------------------------------------------------- */
+
+    const checklist =
+      Array.isArray(row.checklist)
+        ? row.checklist
+        : [];
+
+
+    const allDone =
+      checklist.length === 0 ||
+      checklist.every(
+        item => item.done
+      );
+
+
+    if (!allDone) {
+
+      const continuar =
+        confirm(
+          'Algumas tarefas do checklist ainda não foram concluídas.\n\n' +
+          'Deseja concluir mesmo assim?'
+        );
+
+
+      if (!continuar) {
+
+        return;
+
+      }
+
+    }
+
+
+
+    /* --------------------------------------------------------
+       3. CRONÔMETRO
+    -------------------------------------------------------- */
+
+    if (
+      !row.work_start ||
+      !row.work_end
+    ) {
+
+      alert(
+        'Use o cronômetro antes de concluir a tarefa.\n\n' +
+        'Clique em "Iniciar trabalho" e depois em "Finalizar trabalho".'
+      );
+
+      return;
+
+    }
+
+
+
+    /* --------------------------------------------------------
+       4. SALVA COMO CONCLUÍDA
+    -------------------------------------------------------- */
+
+    const {
+      data: updatedTask,
+      error: updateError
+    } = await sb
+      .from('cleaning_requests')
+      .update({
+
+        status:
+          'completed',
+
+        completed_at:
+          new Date().toISOString()
+
+      })
+      .eq(
+        'id',
+        id
+      )
+      .select()
+      .single();
+
+
+    if (updateError) {
+
+      alert(
+        'Erro ao concluir tarefa: ' +
+        updateError.message
+      );
+
+      return;
+
+    }
+
+
+
+    /* --------------------------------------------------------
+       5. FEEDBACK IMEDIATO
+    -------------------------------------------------------- */
+
+    showSnackbar(
+      '✅ Tarefa concluída!'
+    );
+
+
     reloadTasks();
-  } catch (err) {
-    alert('Erro ao enviar fotos: ' + err.message);
+
+
+
+    /* --------------------------------------------------------
+       6. PEGA SESSÃO
+    -------------------------------------------------------- */
+
+    const {
+      data: sessionData,
+      error: sessionError
+    } = await sb.auth.getSession();
+
+
+    if (
+      sessionError ||
+      !sessionData ||
+      !sessionData.session
+    ) {
+
+      console.warn(
+        'Sessão não encontrada.'
+      );
+
+      return;
+
+    }
+
+
+    const session =
+      sessionData.session;
+
+
+
+    /* --------------------------------------------------------
+       7. URL DO SUPABASE
+    -------------------------------------------------------- */
+
+    const supabaseUrl =
+      window.SUPABASE_URL;
+
+
+    if (!supabaseUrl) {
+
+      console.error(
+        'window.SUPABASE_URL não está configurado.'
+      );
+
+      return;
+
+    }
+
+
+
+    /* --------------------------------------------------------
+       8. CHAMA EDGE FUNCTION
+    -------------------------------------------------------- */
+
+    const response =
+      await fetch(
+
+        `${supabaseUrl}/functions/v1/notify-task-completed`,
+
+        {
+
+          method:
+            'POST',
+
+          headers: {
+
+            'Content-Type':
+              'application/json',
+
+            'Authorization':
+              `Bearer ${session.access_token}`
+
+          },
+
+          body:
+            JSON.stringify({
+
+              taskId:
+                updatedTask.id
+
+            })
+
+        }
+
+      );
+
+
+
+    /* --------------------------------------------------------
+       9. RESPOSTA
+    -------------------------------------------------------- */
+
+    const result =
+      await response
+        .json()
+        .catch(
+          () => ({})
+        );
+
+
+    if (!response.ok) {
+
+      console.error(
+        'Erro da Edge Function:',
+        result
+      );
+
+      showSnackbar(
+        '⚠️ Tarefa concluída, mas a notificação não foi enviada.'
+      );
+
+      return;
+
+    }
+
+
+    console.log(
+      'Notificação enviada:',
+      result
+    );
+
+
+    showSnackbar(
+      '🔔 Cliente notificado!'
+    );
+
+
+  } catch (error) {
+
+
+    console.error(
+      'Erro ao concluir tarefa:',
+      error
+    );
+
+
+    alert(
+      'Erro inesperado: ' +
+      (
+        error.message ||
+        error
+      )
+    );
+
   }
+
 }
 
-// ------------------------------------------------------------
-// CHECKLIST PADRÃO (config global)
-// ------------------------------------------------------------
-async function loadChecklistEditor(){
-  const editor = document.getElementById('checklistEditor');
-  const items = await getDefaultChecklist();
-  editor.innerHTML = items.map(item => {
-    const isLaundry = item.id === 'laundry' || item.label.includes('Lavagem de roupa');
-    return `
-    <div class="edit-row ${isLaundry ? 'laundry' : ''}">
-      <input type="text" value="${escapeHtml(item.label)}" onchange="updateChecklistItemLabel('${item.id}', this.value)">
-      <button onclick="removeChecklistItem('${item.id}')">✕</button>
-    </div>`;
-  }).join('');
+
+
+/* ============================================================
+   FOTOS
+============================================================ */
+
+async function uploadPhotos(
+  id,
+  input
+){
+
+  const files =
+    Array.from(
+      input.files || []
+    );
+
+
+  if (!files.length) return;
+
+
+  showSnackbar(
+    '📤 Enviando fotos...'
+  );
+
+
+  try {
+
+    const urls = [];
+
+
+    for (
+      const file of files
+    ) {
+
+      const safeName =
+        file.name.replace(
+          /[^a-zA-Z0-9.\-_]/g,
+          '_'
+        );
+
+
+      const path =
+        `${id}/${Date.now()}-${safeName}`;
+
+
+      const {
+        error: upErr
+      } = await sb.storage
+        .from(
+          'cleaning-photos'
+        )
+        .upload(
+          path,
+          file
+        );
+
+
+      if (upErr) {
+
+        throw upErr;
+
+      }
+
+
+      const {
+        data
+      } = sb.storage
+        .from(
+          'cleaning-photos'
+        )
+        .getPublicUrl(
+          path
+        );
+
+
+      urls.push(
+        data.publicUrl
+      );
+
+    }
+
+
+    const {
+      data: row,
+      error: fetchErr
+    } = await sb
+      .from(
+        'cleaning_requests'
+      )
+      .select('photos')
+      .eq(
+        'id',
+        id
+      )
+      .single();
+
+
+    if (fetchErr) {
+
+      throw fetchErr;
+
+    }
+
+
+    const allPhotos = [
+
+      ...(Array.isArray(row.photos)
+        ? row.photos
+        : []),
+
+      ...urls
+
+    ];
+
+
+    const {
+      error: updErr
+    } = await sb
+      .from(
+        'cleaning_requests'
+      )
+      .update({
+
+        photos:
+          allPhotos
+
+      })
+      .eq(
+        'id',
+        id
+      );
+
+
+    if (updErr) {
+
+      throw updErr;
+
+    }
+
+
+    showSnackbar(
+      '📸 Fotos enviadas!'
+    );
+
+
+    reloadTasks();
+
+
+  } catch (err) {
+
+    alert(
+      'Erro ao enviar fotos: ' +
+      err.message
+    );
+
+  }
+
 }
+
+
+
+/* ============================================================
+   CHECKLIST PADRÃO
+============================================================ */
+
+async function loadChecklistEditor(){
+
+  const editor =
+    document.getElementById(
+      'checklistEditor'
+    );
+
+
+  if (!editor) return;
+
+
+  const items =
+    await getDefaultChecklist();
+
+
+  editor.innerHTML =
+    items.map(
+      item => {
+
+        const isLaundry =
+          item.id === 'laundry' ||
+          item.label.includes(
+            'Lavagem de roupa'
+          );
+
+
+        return `
+
+          <div
+            class="edit-row
+            ${isLaundry ? 'laundry' : ''}"
+          >
+
+            <input
+              type="text"
+              value="${escapeHtml(item.label)}"
+              onchange="updateChecklistItemLabel(
+                '${item.id}',
+                this.value
+              )"
+            >
+
+
+            <button
+              onclick="removeChecklistItem(
+                '${item.id}'
+              )"
+            >
+              ✕
+            </button>
+
+          </div>
+
+        `;
+
+      }
+    ).join('');
+
+}
+
+
+
+/* ============================================================
+   ADICIONAR CHECKLIST
+============================================================ */
 
 async function addChecklistItem(){
-  const items = await getDefaultChecklist();
-  items.push({ id: 'item_' + Date.now(), label: 'Nova tarefa' });
-  const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
-  if (error) return alert('Erro: ' + error.message);
+
+  const items =
+    await getDefaultChecklist();
+
+
+  items.push({
+
+    id:
+      'item_' +
+      Date.now(),
+
+    label:
+      'Nova tarefa'
+
+  });
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'default_checklist'
+    )
+    .update({
+
+      items,
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      1
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro: ' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
   loadChecklistEditor();
+
 }
 
-async function removeChecklistItem(itemId){
-  const items = (await getDefaultChecklist()).filter(i => i.id !== itemId);
-  const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
-  if (error) return alert('Erro: ' + error.message);
+
+
+/* ============================================================
+   REMOVER CHECKLIST
+============================================================ */
+
+async function removeChecklistItem(
+  itemId
+){
+
+  const items =
+    (
+      await getDefaultChecklist()
+    ).filter(
+      i => i.id !== itemId
+    );
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'default_checklist'
+    )
+    .update({
+
+      items,
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      1
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro: ' +
+      error.message
+    );
+
+    return;
+
+  }
+
+
   loadChecklistEditor();
+
 }
 
-async function updateChecklistItemLabel(itemId, newLabel){
-  const items = (await getDefaultChecklist()).map(i => i.id === itemId ? { ...i, label: newLabel } : i);
-  const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
-  if (error) return alert('Erro: ' + error.message);
+
+
+/* ============================================================
+   ALTERAR CHECKLIST
+============================================================ */
+
+async function updateChecklistItemLabel(
+  itemId,
+  newLabel
+){
+
+  const items =
+    (
+      await getDefaultChecklist()
+    ).map(
+
+      i =>
+        i.id === itemId
+
+          ? {
+              ...i,
+              label:newLabel
+            }
+
+          : i
+
+    );
+
+
+  const {
+    error
+  } = await sb
+    .from(
+      'default_checklist'
+    )
+    .update({
+
+      items,
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      1
+    );
+
+
+  if (error) {
+
+    alert(
+      'Erro: ' +
+      error.message
+    );
+
+  }
+
 }
+
 </script>
+
+
+
+<!-- ============================================================
+     SERVICE WORKER
+============================================================ -->
+
 <script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js').catch(console.error);
+
+if (
+  'serviceWorker' in navigator
+) {
+
+  navigator.serviceWorker
+    .register(
+      'service-worker.js'
+    )
+    .catch(
+      console.error
+    );
+
 }
-if (typeof setupInstallAndNotifyBanner === 'function') setupInstallAndNotifyBanner();
+
+
+if (
+  typeof setupInstallAndNotifyBanner ===
+  'function'
+) {
+
+  setupInstallAndNotifyBanner();
+
+}
+
 </script>
+
 </body>
 </html>
