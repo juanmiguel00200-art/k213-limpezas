@@ -1,52 +1,76 @@
 /* ============================================================
-   CleanSync — núcleo compartilhado
+   CleanSync — APP COMMON
    ============================================================
+
+   Núcleo compartilhado do CleanSync.
 
    Inclui:
    - Configuração Supabase
-   - Autenticação própria
+   - Login próprio por usuário + senha
+   - Recuperação por código
    - Sessão local
    - Controle de acesso
-   - Realtime das tarefas
+   - Realtime das limpezas
+   - Realtime do chat
+   - Criação/obtenção de conversa
+   - Botão "Abrir chat"
+   - Contagem de mensagens
+   - Última mensagem
    - Cronômetros
    - Checklist
    - Fotos
-   - Administração
-   - PWA / instalação
-   - OneSignal
-   - CHAT CLIENTE ↔ PROFISSIONAL
-   - Realtime das mensagens
+   - Ações administrativas
+   - Instalação PWA
+   - Notificações
 
    IMPORTANTE:
-   O projeto CleanSync utiliza autenticação própria através da
-   tabela "usuarios", e NÃO Supabase Auth.
+   O sistema atual usa autenticação própria através da tabela
+   "usuarios" e localStorage.
 
-   Por isso, o chat utiliza os IDs dos usuários armazenados na
-   sessão local e os IDs presentes em cleaning_requests.
+   Por isso NÃO usamos:
+       supabase.auth.getUser()
+
+   A sessão atual é:
+       k213_session
+
    ============================================================ */
 
 
 /* ============================================================
    CONFIGURAÇÃO SUPABASE
-   ============================================================ */
+============================================================ */
 
-const SUPABASE_URL = 'https://oyxmrrazgjdnyzhyinhc.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
+const SUPABASE_URL =
+  'https://oyxmrrazgjdnyzhyinhc.supabase.co';
+
+const SUPABASE_ANON_KEY =
+  'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
+
 
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
 
 const APP_CONFIGURED = true;
 
-const sb = window.supabase.createClient(
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY
-);
+
+/*
+   IMPORTANTE:
+
+   A biblioteca do Supabase já cria window.supabase.
+
+   Por isso usamos "sb" para o cliente.
+*/
+
+const sb =
+  window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+  );
 
 
 /* ============================================================
    CANAIS REALTIME
-   ============================================================ */
+============================================================ */
 
 let realtimeChannel = null;
 let chatRealtimeChannel = null;
@@ -54,49 +78,62 @@ let chatRealtimeChannel = null;
 
 /* ============================================================
    AVISO DE CONFIGURAÇÃO
-   ============================================================ */
+============================================================ */
 
 function renderSetupWarning(){
+
   document.body.innerHTML = `
+
     <div class="setup-warning">
+
       <h2>⚠️ Configuração pendente</h2>
 
       <p>
-        Este app ainda não está ligado a um projeto Supabase.
+        Este app ainda não está ligado
+        corretamente ao Supabase.
       </p>
 
       <p>
-        Abra <code>app-common.js</code>, encontre
-        <code>SUPABASE_URL</code> e
-        <code>SUPABASE_ANON_KEY</code>
-        no topo do arquivo.
+        Verifique o arquivo
+        <code>app-common.js</code>.
       </p>
+
     </div>
+
   `;
+
 }
 
 
 /* ============================================================
    AUTENTICAÇÃO PRÓPRIA
-   ============================================================ */
+============================================================ */
+
+
+/* SHA-256 */
 
 async function sha256Hex(text){
-  const buf = await crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(text)
-  );
 
-  return Array.from(
-    new Uint8Array(buf)
-  )
-  .map(b => b.toString(16).padStart(2, '0'))
-  .join('');
+  const buf =
+    await crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(text)
+    );
+
+  return Array
+    .from(new Uint8Array(buf))
+    .map(
+      b =>
+        b.toString(16).padStart(2,'0')
+    )
+    .join('');
+
 }
 
 
 /* ============================================================
    CÓDIGO DE RECUPERAÇÃO
-   ============================================================ */
+============================================================ */
 
 function generateRecoveryCode(){
 
@@ -106,25 +143,37 @@ function generateRecoveryCode(){
   let code = '';
 
   for(let i = 0; i < 8; i++){
-    code += chars[
-      Math.floor(Math.random() * chars.length)
-    ];
+
+    code +=
+      chars[
+        Math.floor(
+          Math.random() * chars.length
+        )
+      ];
+
   }
 
-  return code.slice(0,4) + '-' + code.slice(4);
+  return (
+    code.slice(0,4) +
+    '-' +
+    code.slice(4)
+  );
+
 }
 
 
 /* ============================================================
    SESSÃO
-   ============================================================ */
+============================================================ */
 
 function getSession(){
 
   try{
 
     return JSON.parse(
-      localStorage.getItem('k213_session') || 'null'
+      localStorage.getItem(
+        'k213_session'
+      ) || 'null'
     );
 
   }catch{
@@ -132,6 +181,7 @@ function getSession(){
     return null;
 
   }
+
 }
 
 
@@ -147,14 +197,16 @@ function setSession(obj){
 
 function clearSession(){
 
-  localStorage.removeItem('k213_session');
+  localStorage.removeItem(
+    'k213_session'
+  );
 
 }
 
 
 /* ============================================================
-   CRIAÇÃO DE CONTA
-   ============================================================ */
+   CRIAR CONTA
+============================================================ */
 
 async function criarConta(
   name,
@@ -170,18 +222,23 @@ async function criarConta(
   const recovery_code =
     generateRecoveryCode();
 
+
   const { data, error } =
     await sb.rpc(
       'k213_criar_conta',
       {
         p_name: name,
         p_username: username,
-        p_password_hash: password_hash,
-        p_recovery_code: recovery_code,
+        p_password_hash:
+          password_hash,
+        p_recovery_code:
+          recovery_code,
         p_role: role,
-        p_address: address || null
+        p_address:
+          address || null
       }
     );
+
 
   if(error){
 
@@ -193,14 +250,20 @@ async function criarConta(
 
   }
 
+
   const row =
     Array.isArray(data)
       ? data[0]
       : data;
 
+
   return {
+
     user: row,
-    recovery_code: row.recovery_code
+
+    recovery_code:
+      row.recovery_code
+
   };
 
 }
@@ -208,7 +271,7 @@ async function criarConta(
 
 /* ============================================================
    LOGIN
-   ============================================================ */
+============================================================ */
 
 async function entrarComSenha(
   username,
@@ -218,22 +281,28 @@ async function entrarComSenha(
   const password_hash =
     await sha256Hex(password);
 
+
   const { data, error } =
     await sb.rpc(
       'k213_login',
       {
-        p_username: username,
-        p_password_hash: password_hash
+        p_username:
+          username,
+
+        p_password_hash:
+          password_hash
       }
     );
 
-  if(error)
-    throw error;
+
+  if(error) throw error;
+
 
   const row =
     Array.isArray(data)
       ? data[0]
       : data;
+
 
   if(!row){
 
@@ -243,14 +312,15 @@ async function entrarComSenha(
 
   }
 
+
   return row;
 
 }
 
 
 /* ============================================================
-   RECUPERAÇÃO DE SENHA
-   ============================================================ */
+   REDEFINIR SENHA
+============================================================ */
 
 async function redefinirSenha(
   username,
@@ -264,11 +334,15 @@ async function redefinirSenha(
   const newCode =
     generateRecoveryCode();
 
+
   const { data, error } =
     await sb.rpc(
       'k213_redefinir_senha',
       {
-        p_username: username,
+
+        p_username:
+          username,
+
         p_recovery_code:
           recoveryCode.toUpperCase(),
 
@@ -277,16 +351,19 @@ async function redefinirSenha(
 
         p_new_recovery_code:
           newCode
+
       }
     );
 
-  if(error)
-    throw error;
+
+  if(error) throw error;
+
 
   const row =
     Array.isArray(data)
       ? data[0]
       : data;
+
 
   if(!row || !row.ok){
 
@@ -296,14 +373,44 @@ async function redefinirSenha(
 
   }
 
+
   return newCode;
 
 }
 
 
 /* ============================================================
-   GUARDA DE ROTA
-   ============================================================ */
+   NORMALIZAR ROLE
+============================================================ */
+
+function normalizeRole(role){
+
+  if(role === 'professional')
+    return 'professional';
+
+  if(role === 'profissional')
+    return 'professional';
+
+  if(role === 'cleaner')
+    return 'professional';
+
+  if(role === 'client')
+    return 'client';
+
+  if(role === 'cliente')
+    return 'client';
+
+  if(role === 'admin')
+    return 'admin';
+
+  return role;
+
+}
+
+
+/* ============================================================
+   CONTROLE DE ACESSO
+============================================================ */
 
 async function requireRole(requiredRole){
 
@@ -315,7 +422,10 @@ async function requireRole(requiredRole){
 
   }
 
-  const session = getSession();
+
+  const session =
+    getSession();
+
 
   if(!session){
 
@@ -327,40 +437,107 @@ async function requireRole(requiredRole){
   }
 
 
+  const actualRole =
+    normalizeRole(
+      session.role
+    );
+
+
+  const required =
+    normalizeRole(
+      requiredRole
+    );
+
+
   if(
-    session.role !== requiredRole &&
-    session.role !== 'admin'
+    required &&
+    actualRole !== required &&
+    actualRole !== 'admin'
   ){
 
-    window.location.href =
-      session.role === 'admin'
-        ? 'admin.html'
-        : session.role === 'profissional'
-          ? 'profissional.html'
-          : 'cliente.html';
+    if(actualRole === 'professional'){
+
+      window.location.href =
+        'profissional.html';
+
+    }
+
+    else if(actualRole === 'client'){
+
+      window.location.href =
+        'cliente.html';
+
+    }
+
+    else if(actualRole === 'admin'){
+
+      window.location.href =
+        'admin.html';
+
+    }
+
+    else{
+
+      window.location.href =
+        'index.html';
+
+    }
+
 
     return null;
 
   }
 
 
-  paintWho({
-    name: session.name,
-    role: session.role
-  });
+  const profile = {
+
+    id:
+      session.id,
+
+    full_name:
+      session.name ||
+      session.full_name ||
+      session.username ||
+      '',
+
+    name:
+      session.name ||
+      session.full_name ||
+      session.username ||
+      '',
+
+    role:
+      actualRole,
+
+    username:
+      session.username,
+
+    email:
+      session.email ||
+      session.username ||
+      ''
+
+  };
+
+
+  paintWho(profile);
 
 
   return {
 
     user: {
-      id: session.id,
-      email: session.username
+
+      id:
+        session.id,
+
+      email:
+        session.email ||
+        session.username ||
+        ''
+
     },
 
-    profile: {
-      name: session.name,
-      role: session.role
-    }
+    profile
 
   };
 
@@ -368,8 +545,8 @@ async function requireRole(requiredRole){
 
 
 /* ============================================================
-   IDENTIFICAÇÃO DO USUÁRIO
-   ============================================================ */
+   MOSTRAR USUÁRIO NO TOPO
+============================================================ */
 
 function paintWho(profile){
 
@@ -378,18 +555,31 @@ function paintWho(profile){
       'topWhoName'
     );
 
+
   if(nameEl){
 
-    nameEl.textContent =
-      profile.name +
-      ' · ' +
-      (
-        profile.role === 'admin'
-          ? 'Administrador'
-          : profile.role === 'profissional'
-            ? 'Profissional'
-            : 'Cliente'
+    const role =
+      normalizeRole(
+        profile.role
       );
+
+
+    const roleLabel =
+      role === 'admin'
+        ? 'Administrador'
+        : role === 'professional'
+          ? 'Profissional'
+          : 'Cliente';
+
+
+    nameEl.textContent =
+      (
+        profile.full_name ||
+        profile.name ||
+        ''
+      ) +
+      ' · ' +
+      roleLabel;
 
   }
 
@@ -399,9 +589,10 @@ function paintWho(profile){
       'navAdminLink'
     );
 
+
   if(
     adminLink &&
-    profile.role === 'admin'
+    normalizeRole(profile.role) === 'admin'
   ){
 
     adminLink.style.display = '';
@@ -413,7 +604,7 @@ function paintWho(profile){
 
 /* ============================================================
    LOGOUT
-   ============================================================ */
+============================================================ */
 
 function logout(){
 
@@ -426,7 +617,8 @@ function logout(){
       realtimeChannel
     );
 
-    realtimeChannel = null;
+    realtimeChannel =
+      null;
 
   }
 
@@ -440,12 +632,14 @@ function logout(){
       chatRealtimeChannel
     );
 
-    chatRealtimeChannel = null;
+    chatRealtimeChannel =
+      null;
 
   }
 
 
   clearSession();
+
 
   window.location.href =
     'index.html';
@@ -454,16 +648,15 @@ function logout(){
 
 
 /* ============================================================
-   REALTIME DAS TAREFAS
-   ============================================================ */
+   REALTIME — LIMPEZAS
+============================================================ */
 
 function startRealtime(onChange){
 
   if(
     realtimeChannel ||
     !sb
-  )
-    return;
+  ) return;
 
 
   realtimeChannel =
@@ -489,7 +682,7 @@ function startRealtime(onChange){
 
 /* ============================================================
    DEBOUNCE
-   ============================================================ */
+============================================================ */
 
 function debounce(
   fn,
@@ -498,14 +691,17 @@ function debounce(
 
   let t;
 
+
   return (...args) => {
 
     clearTimeout(t);
 
-    t = setTimeout(
-      () => fn(...args),
-      wait
-    );
+
+    t =
+      setTimeout(
+        () => fn(...args),
+        wait
+      );
 
   };
 
@@ -514,90 +710,81 @@ function debounce(
 
 /* ============================================================
    ============================================================
-   CHAT — CLIENTE ↔ PROFISSIONAL
+   CHAT — FUNÇÕES PRINCIPAIS
    ============================================================
-   ============================================================ */
+============================================================ */
 
 
 /*
-   Obtém o usuário atual da sessão.
+   Retorna o ID do usuário da sessão atual.
 */
 
-function getCurrentChatUser(){
+function getCurrentUserId(){
 
   const session =
     getSession();
 
-  if(!session)
-    return null;
-
-  return {
-
-    id: session.id,
-
-    name:
-      session.name || 'Usuário',
-
-    username:
-      session.username || '',
-
-    role:
-      session.role || ''
-
-  };
+  return session
+    ? session.id
+    : null;
 
 }
 
 
-/*
-   Cria ou recupera a conversa vinculada
-   à determinada tarefa.
-*/
+/* ============================================================
+   OBTER / CRIAR CONVERSA
+============================================================ */
 
-async function getOrCreateConversation(task){
+async function getOrCreateConversation(
+  cleaningId
+){
 
-  if(!task || !task.id){
-
-    throw new Error(
-      'Tarefa inválida para iniciar o chat.'
-    );
-
-  }
-
-
-  const currentUser =
-    getCurrentChatUser();
-
-  if(!currentUser){
+  if(!cleaningId){
 
     throw new Error(
-      'Você precisa estar logado para usar o chat.'
+      'ID da limpeza não informado.'
     );
 
   }
 
 
   /*
-     Primeiro procuramos uma conversa existente
-     para essa tarefa.
+     Primeiro tenta encontrar uma conversa
+     existente.
   */
 
   const {
     data: existing,
-    error: existingError
+    error: findError
   } = await sb
-
     .from('conversations')
-
-    .select('*')
-
-    .eq('task_id', task.id)
-
+    .select(`
+      id,
+      task_id,
+      client_id,
+      professional_id,
+      created_at
+    `)
+    .eq(
+      'task_id',
+      cleaningId
+    )
     .maybeSingle();
 
 
-  if(existingError)
-    throw existingError;
+  if(findError){
+
+    /*
+       Se o banco estiver usando RPC
+       para criação, tentamos abaixo.
+    */
+
+    console.warn(
+      'Busca direta da conversa:',
+      findError.message
+    );
+
+  }
 
 
   if(existing){
@@ -608,98 +795,187 @@ async function getOrCreateConversation(task){
 
 
   /*
-     Determina cliente e profissional.
+     Busca a limpeza para descobrir
+     cliente e profissional.
   */
 
-  const clientId =
-    task.client_id || null;
+  const {
+    data: cleaning,
+    error: cleaningError
+  } = await sb
+    .from('cleaning_requests')
+    .select(`
+      id,
+      client_id,
+      professional_id
+    `)
+    .eq(
+      'id',
+      cleaningId
+    )
+    .single();
 
-  const professionalId =
-    task.professional_id || null;
 
-
-  if(!clientId || !professionalId){
+  if(cleaningError){
 
     throw new Error(
-      'Esta tarefa ainda não possui cliente e profissional vinculados.'
+      'Não foi possível localizar a limpeza: ' +
+      cleaningError.message
+    );
+
+  }
+
+
+  if(
+    !cleaning.client_id ||
+    !cleaning.professional_id
+  ){
+
+    throw new Error(
+      'Esta limpeza ainda não possui cliente e profissional vinculados.'
     );
 
   }
 
 
   /*
-     Tenta criar a conversa.
+     Tenta criação direta.
   */
 
   const {
-    data,
-    error
+    data: created,
+    error: createError
   } = await sb
-
     .from('conversations')
-
     .insert({
 
       task_id:
-        task.id,
+        cleaning.id,
 
       client_id:
-        clientId,
+        cleaning.client_id,
 
       professional_id:
-        professionalId
+        cleaning.professional_id
 
     })
-
-    .select('*')
-
+    .select()
     .single();
 
 
-  /*
-     Se outro usuário criou ao mesmo tempo,
-     tentamos recuperar a conversa.
-  */
+  if(!createError && created){
 
-  if(error){
-
-    const {
-      data: retry
-    } = await sb
-
-      .from('conversations')
-
-      .select('*')
-
-      .eq('task_id', task.id)
-
-      .maybeSingle();
-
-
-    if(retry)
-      return retry;
-
-
-    throw error;
+    return created;
 
   }
 
 
-  return data;
+  /*
+     Caso exista RPC no banco,
+     tenta também.
+
+     Isso é útil para o sistema atual,
+     principalmente porque ele usa sessão
+     própria.
+  */
+
+  const {
+    data: rpcData,
+    error: rpcError
+  } = await sb.rpc(
+    'create_cleaning_conversation',
+    {
+      p_cleaning_id:
+        cleaningId
+    }
+  );
+
+
+  if(!rpcError){
+
+    const conversationId =
+      Array.isArray(rpcData)
+        ? rpcData[0]?.id ||
+          rpcData[0]
+        : rpcData?.id ||
+          rpcData;
+
+
+    if(conversationId){
+
+      return {
+
+        id:
+          conversationId,
+
+        task_id:
+          cleaning.id,
+
+        client_id:
+          cleaning.client_id,
+
+        professional_id:
+          cleaning.professional_id
+
+      };
+
+    }
+
+  }
+
+
+  throw new Error(
+    createError?.message ||
+    rpcError?.message ||
+    'Não foi possível criar a conversa.'
+  );
 
 }
 
 
-/*
-   Abre o chat da tarefa.
-*/
+/* ============================================================
+   BOTÃO DE CHAT
+============================================================ */
 
-async function openChat(taskId){
+function chatButtonHtml(
+  task,
+  extraClass = ''
+){
 
-  if(!taskId){
+  if(!task || !task.id){
 
-    alert(
-      'Não foi possível identificar a tarefa.'
+    return '';
+
+  }
+
+
+  return `
+
+    <button
+      type="button"
+      class="btn btn-outline chat-open-btn ${extraClass}"
+      onclick="openChat('${task.id}')"
+    >
+      💬 Abrir chat
+    </button>
+
+  `;
+
+}
+
+
+/* ============================================================
+   ABRIR CHAT
+============================================================ */
+
+async function openChat(
+  cleaningId
+){
+
+  if(!cleaningId){
+
+    showSnackbar(
+      'Limpeza não encontrada.'
     );
 
     return;
@@ -709,52 +985,74 @@ async function openChat(taskId){
 
   try{
 
+    showSnackbar(
+      'Abrindo chat...'
+    );
+
+
     /*
-       Busca a tarefa.
+       Confirma que a limpeza existe.
     */
 
     const {
-      data: task,
+      data: cleaning,
       error
     } = await sb
-
       .from('cleaning_requests')
-
-      .select('*')
-
-      .eq('id', taskId)
-
+      .select(`
+        id,
+        ref_code,
+        client_name,
+        client_id,
+        professional_id,
+        address,
+        date
+      `)
+      .eq(
+        'id',
+        cleaningId
+      )
       .single();
 
 
-    if(error)
+    if(error){
+
       throw error;
+
+    }
 
 
     /*
-       Cria/recupera a conversa.
+       Cria ou recupera conversa.
     */
 
     const conversation =
       await getOrCreateConversation(
-        task
+        cleaningId
       );
 
 
     /*
-       Guarda temporariamente para
-       a página chat.html.
+       Guarda contexto local para o chat.html.
     */
 
     sessionStorage.setItem(
-      'cleansync_chat_task',
-      JSON.stringify(task)
-    );
+      'cleansync_chat_context',
+      JSON.stringify({
 
+        conversationId:
+          conversation.id,
 
-    sessionStorage.setItem(
-      'cleansync_chat_conversation',
-      JSON.stringify(conversation)
+        cleaningId:
+          cleaning.id,
+
+        refCode:
+          cleaning.ref_code,
+
+        address:
+          cleaning.address
+
+      })
     );
 
 
@@ -766,17 +1064,23 @@ async function openChat(taskId){
       'chat.html?conversation=' +
       encodeURIComponent(
         conversation.id
+      ) +
+      '&task=' +
+      encodeURIComponent(
+        cleaning.id
       );
 
-  }catch(error){
+  }
+  catch(error){
 
     console.error(
       'Erro ao abrir chat:',
       error
     );
 
-    alert(
-      'Não foi possível abrir o chat: ' +
+
+    showSnackbar(
+      'Erro ao abrir chat: ' +
       error.message
     );
 
@@ -785,95 +1089,37 @@ async function openChat(taskId){
 }
 
 
-/*
-   Recupera a conversa armazenada.
-*/
-
-function getStoredConversation(){
-
-  try{
-
-    return JSON.parse(
-      sessionStorage.getItem(
-        'cleansync_chat_conversation'
-      ) || 'null'
-    );
-
-  }catch{
-
-    return null;
-
-  }
-
-}
-
-
-/*
-   Recupera a tarefa armazenada.
-*/
-
-function getStoredChatTask(){
-
-  try{
-
-    return JSON.parse(
-      sessionStorage.getItem(
-        'cleansync_chat_task'
-      ) || 'null'
-    );
-
-  }catch{
-
-    return null;
-
-  }
-
-}
-
-
-/*
-   Limpa o contexto do chat.
-*/
-
-function clearChatStorage(){
-
-  sessionStorage.removeItem(
-    'cleansync_chat_task'
-  );
-
-  sessionStorage.removeItem(
-    'cleansync_chat_conversation'
-  );
-
-}
-
-
 /* ============================================================
-   BUSCAR MENSAGENS
-   ============================================================ */
+   CARREGAR MENSAGENS
+============================================================ */
 
 async function loadChatMessages(
   conversationId
 ){
 
-  if(!conversationId)
+  if(!conversationId){
+
     return [];
+
+  }
 
 
   const {
     data,
     error
   } = await sb
-
     .from('messages')
-
-    .select('*')
-
+    .select(`
+      id,
+      conversation_id,
+      sender_id,
+      content,
+      created_at
+    `)
     .eq(
       'conversation_id',
       conversationId
     )
-
     .order(
       'created_at',
       {
@@ -882,8 +1128,16 @@ async function loadChatMessages(
     );
 
 
-  if(error)
+  if(error){
+
+    console.error(
+      'Erro ao carregar mensagens:',
+      error
+    );
+
     throw error;
+
+  }
 
 
   return data || [];
@@ -893,21 +1147,21 @@ async function loadChatMessages(
 
 /* ============================================================
    ENVIAR MENSAGEM
-   ============================================================ */
+============================================================ */
 
 async function sendChatMessage(
   conversationId,
   content
 ){
 
-  const currentUser =
-    getCurrentChatUser();
+  const senderId =
+    getCurrentUserId();
 
 
-  if(!currentUser){
+  if(!senderId){
 
     throw new Error(
-      'Usuário não autenticado.'
+      'Usuário não está logado.'
     );
 
   }
@@ -926,10 +1180,10 @@ async function sendChatMessage(
   }
 
 
-  if(!conversationId){
+  if(text.length > 2000){
 
     throw new Error(
-      'Conversa não encontrada.'
+      'A mensagem é muito longa.'
     );
 
   }
@@ -939,29 +1193,33 @@ async function sendChatMessage(
     data,
     error
   } = await sb
-
     .from('messages')
-
     .insert({
 
       conversation_id:
         conversationId,
 
       sender_id:
-        currentUser.id,
+        senderId,
 
       content:
         text
 
     })
-
-    .select('*')
-
+    .select()
     .single();
 
 
-  if(error)
+  if(error){
+
+    console.error(
+      'Erro ao enviar mensagem:',
+      error
+    );
+
     throw error;
+
+  }
 
 
   return data;
@@ -971,23 +1229,19 @@ async function sendChatMessage(
 
 /* ============================================================
    REALTIME DO CHAT
-   ============================================================ */
+============================================================ */
 
 function startChatRealtime(
   conversationId,
   onMessage
 ){
 
-  if(
-    !conversationId ||
-    !sb
-  )
+  if(!conversationId){
+
     return null;
 
+  }
 
-  /*
-     Remove canal anterior.
-  */
 
   if(chatRealtimeChannel){
 
@@ -995,32 +1249,31 @@ function startChatRealtime(
       chatRealtimeChannel
     );
 
-    chatRealtimeChannel = null;
+    chatRealtimeChannel =
+      null;
 
   }
 
 
-  const channelName =
-    'chat_' +
-    String(conversationId)
-      .replace(/[^a-zA-Z0-9_-]/g, '');
-
-
   chatRealtimeChannel =
     sb
-
-      .channel(channelName)
+      .channel(
+        'cleansync-chat-' +
+        conversationId
+      )
 
       .on(
-
         'postgres_changes',
-
         {
-          event: 'INSERT',
 
-          schema: 'public',
+          event:
+            'INSERT',
 
-          table: 'messages',
+          schema:
+            'public',
+
+          table:
+            'messages',
 
           filter:
             'conversation_id=eq.' +
@@ -1045,7 +1298,16 @@ function startChatRealtime(
 
       )
 
-      .subscribe();
+      .subscribe(
+        status => {
+
+          console.log(
+            'CleanSync Chat Realtime:',
+            status
+          );
+
+        }
+      );
 
 
   return chatRealtimeChannel;
@@ -1053,22 +1315,22 @@ function startChatRealtime(
 }
 
 
-/*
-   Desliga o Realtime do chat.
-*/
+/* ============================================================
+   PARAR REALTIME DO CHAT
+============================================================ */
 
 function stopChatRealtime(){
 
   if(
-    chatRealtimeChannel &&
-    sb
+    chatRealtimeChannel
   ){
 
     sb.removeChannel(
       chatRealtimeChannel
     );
 
-    chatRealtimeChannel = null;
+    chatRealtimeChannel =
+      null;
 
   }
 
@@ -1076,24 +1338,71 @@ function stopChatRealtime(){
 
 
 /* ============================================================
-   CONTAGEM DE MENSAGENS
-   ============================================================ */
+   CONTADOR DE MENSAGENS
+============================================================ */
 
-async function getChatMessageCount(
+async function getChatInfo(
   conversationId
 ){
 
-  if(!conversationId)
-    return 0;
+  if(!conversationId){
+
+    return {
+
+      count: 0,
+
+      lastMessage: null
+
+    };
+
+  }
+
+
+  const {
+    data,
+    error
+  } = await sb
+    .from('messages')
+    .select(`
+      content,
+      created_at
+    `)
+    .eq(
+      'conversation_id',
+      conversationId
+    )
+    .order(
+      'created_at',
+      {
+        ascending: false
+      }
+    )
+    .limit(1);
+
+
+  if(error){
+
+    console.error(
+      'Erro ao obter chat:',
+      error
+    );
+
+    return {
+
+      count: 0,
+
+      lastMessage: null
+
+    };
+
+  }
 
 
   const {
     count,
-    error
+    error: countError
   } = await sb
-
     .from('messages')
-
     .select(
       'id',
       {
@@ -1101,72 +1410,66 @@ async function getChatMessageCount(
         head: true
       }
     )
-
     .eq(
       'conversation_id',
       conversationId
     );
 
 
-  if(error){
+  return {
 
-    console.warn(
-      'Erro ao contar mensagens:',
-      error.message
-    );
+    count:
+      countError
+        ? 0
+        : count || 0,
 
-    return 0;
+    lastMessage:
+      data?.[0] || null
 
-  }
-
-
-  return count || 0;
+  };
 
 }
 
 
 /* ============================================================
-   ÚLTIMA MENSAGEM
-   ============================================================ */
+   OBTER CONVERSA DA LIMPEZA
+============================================================ */
 
-async function getLastChatMessage(
-  conversationId
+async function getConversationForTask(
+  taskId
 ){
 
-  if(!conversationId)
+  if(!taskId){
+
     return null;
+
+  }
 
 
   const {
     data,
     error
   } = await sb
-
-    .from('messages')
-
-    .select('*')
-
+    .from('conversations')
+    .select(`
+      id,
+      task_id,
+      client_id,
+      professional_id,
+      created_at
+    `)
     .eq(
-      'conversation_id',
-      conversationId
+      'task_id',
+      taskId
     )
-
-    .order(
-      'created_at',
-      {
-        ascending: false
-      }
-    )
-
-    .limit(1)
     .maybeSingle();
 
 
   if(error){
 
-    console.warn(
-      'Erro ao buscar última mensagem:',
-      error.message
+    console.error(
+      'Erro ao buscar conversa:',
+      error
     );
 
     return null;
@@ -1180,512 +1483,13 @@ async function getLastChatMessage(
 
 
 /* ============================================================
-   FORMATAÇÃO DE HORA DO CHAT
-   ============================================================ */
+   ============================================================
+   UTILITÁRIOS
+   ============================================================
+============================================================ */
 
-function formatChatTime(
-  timestamp
-){
 
-  if(!timestamp)
-    return '';
-
-
-  const d =
-    new Date(timestamp);
-
-
-  return d.toLocaleTimeString(
-    'pt-BR',
-    {
-      hour: '2-digit',
-      minute: '2-digit'
-    }
-  );
-
-}
-
-
-/* ============================================================
-   FORMATAÇÃO DE DATA/HORA COMPLETA
-   ============================================================ */
-
-function formatChatDateTime(
-  timestamp
-){
-
-  if(!timestamp)
-    return '';
-
-
-  const d =
-    new Date(timestamp);
-
-
-  return d.toLocaleString(
-    'pt-BR',
-    {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }
-  );
-
-}
-
-
-/* ============================================================
-   NOTIFICAÇÃO LOCAL DE NOVA MENSAGEM
-   ============================================================ */
-
-function notifyNewChatMessage(
-  message
-){
-
-  if(!message)
-    return;
-
-
-  const current =
-    getCurrentChatUser();
-
-
-  if(
-    current &&
-    message.sender_id ===
-    current.id
-  ){
-
-    return;
-
-  }
-
-
-  showSnackbar(
-    '💬 Nova mensagem recebida'
-  );
-
-
-  /*
-     Se as notificações do navegador
-     estiverem permitidas, podemos avisar.
-  */
-
-  try{
-
-    if(
-      'Notification' in window &&
-      Notification.permission ===
-      'granted'
-    ){
-
-      new Notification(
-        'CleanSync · Nova mensagem',
-        {
-          body:
-            message.content ||
-            'Você recebeu uma nova mensagem.'
-        }
-      );
-
-    }
-
-  }catch(error){
-
-    console.warn(
-      'Notificação local indisponível:',
-      error
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   BOTÃO / BADGE DE CHAT
-   ============================================================ */
-
-function chatButtonHtml(
-  task
-){
-
-  if(
-    !task ||
-    !task.id
-  ){
-
-    return '';
-
-  }
-
-
-  return `
-    <button
-      class="btn btn-outline"
-      onclick="openChat('${task.id}')"
-      type="button"
-    >
-      💬 Abrir chat
-    </button>
-  `;
-
-}
-
-
-/* ============================================================
-   INSTALAÇÃO PWA + NOTIFICAÇÕES
-   ============================================================ */
-
-function setupInstallAndNotifyBanner(){
-
-  let deferredInstallPrompt = null;
-
-  let showInstall = false;
-
-  let showNotifyModal = false;
-
-
-  window.addEventListener(
-    'beforeinstallprompt',
-    (e) => {
-
-      e.preventDefault();
-
-      deferredInstallPrompt = e;
-
-      showInstall = true;
-
-      renderInstallBanner();
-
-    }
-  );
-
-
-  window.addEventListener(
-    'appinstalled',
-    () => {
-
-      showInstall = false;
-
-      renderInstallBanner();
-
-      showSnackbar(
-        '🎉 App instalado! Já pode acessar direto da tela inicial.'
-      );
-
-    }
-  );
-
-
-  if(
-    window.matchMedia(
-      '(display-mode: standalone)'
-    ).matches
-  ){
-
-    showInstall = false;
-
-  }
-
-
-  const notifyDismissedThisSession =
-    sessionStorage.getItem(
-      'cleansync_notify_dismissed'
-    ) === '1';
-
-
-  if(
-    'Notification' in window &&
-    Notification.permission === 'default' &&
-    !notifyDismissedThisSession
-  ){
-
-    showNotifyModal = true;
-
-  }
-
-
-  /* ========================================================
-     BARRA DE INSTALAÇÃO
-     ======================================================== */
-
-  function renderInstallBanner(){
-
-    let el =
-      document.getElementById(
-        'installBanner'
-      );
-
-
-    if(!showInstall){
-
-      if(el)
-        el.remove();
-
-      return;
-
-    }
-
-
-    if(el)
-      return;
-
-
-    el =
-      document.createElement(
-        'div'
-      );
-
-
-    el.id =
-      'installBanner';
-
-    el.className =
-      'install-banner';
-
-
-    el.innerHTML = `
-
-      <span class="install-banner-icon">
-        📲
-      </span>
-
-      <div class="install-banner-text">
-
-        <strong>
-          Instale o CleanSync
-        </strong>
-
-        <span>
-          Acesso rápido direto da tela inicial,
-          sem precisar abrir o navegador ✨
-        </span>
-
-      </div>
-
-      <button
-        class="btn btn-accent btn-sm"
-        id="btnInstallApp"
-      >
-        Instalar
-      </button>
-
-      <button
-        class="install-banner-close"
-        id="btnDismissInstall"
-        aria-label="Fechar"
-      >
-        ✕
-      </button>
-
-    `;
-
-
-    document.body.appendChild(el);
-
-
-    document.getElementById(
-      'btnInstallApp'
-    ).onclick =
-      async () => {
-
-        if(!deferredInstallPrompt)
-          return;
-
-
-        deferredInstallPrompt.prompt();
-
-
-        await deferredInstallPrompt.userChoice;
-
-
-        deferredInstallPrompt =
-          null;
-
-        showInstall =
-          false;
-
-        renderInstallBanner();
-
-      };
-
-
-    document.getElementById(
-      'btnDismissInstall'
-    ).onclick =
-      () => {
-
-        showInstall =
-          false;
-
-        renderInstallBanner();
-
-      };
-
-  }
-
-
-  /* ========================================================
-     MODAL DE NOTIFICAÇÕES
-     ======================================================== */
-
-  function renderNotifyModal(){
-
-    let el =
-      document.getElementById(
-        'notifyOverlay'
-      );
-
-
-    if(!showNotifyModal){
-
-      if(el)
-        el.remove();
-
-      return;
-
-    }
-
-
-    if(el)
-      return;
-
-
-    el =
-      document.createElement(
-        'div'
-      );
-
-
-    el.id =
-      'notifyOverlay';
-
-    el.className =
-      'notify-overlay';
-
-
-    el.innerHTML = `
-
-      <div class="notify-modal">
-
-        <div class="notify-emoji">
-          🔔
-        </div>
-
-        <h3>
-          Não perca nenhuma novidade!
-        </h3>
-
-        <p>
-          Ative as notificações e saiba
-          na hora quando uma tarefa for
-          criada, iniciada, concluída ou
-          quando houver novidades. 🧹✨
-        </p>
-
-        <div class="notify-actions">
-
-          <button
-            class="btn btn-accent"
-            id="btnActivateNotify"
-          >
-            ✅ Permitir notificações
-          </button>
-
-          <button
-            class="btn btn-ghost"
-            id="btnDismissNotify"
-          >
-            Agora não
-          </button>
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    document.body.appendChild(el);
-
-
-    document.getElementById(
-      'btnActivateNotify'
-    ).onclick =
-      () => {
-
-        if(
-          window.OneSignalDeferred
-        ){
-
-          window.OneSignalDeferred.push(
-            function(OneSignal){
-
-              OneSignal
-                .Slidedown
-                .promptPush();
-
-            }
-          );
-
-        }
-
-
-        showNotifyModal =
-          false;
-
-        renderNotifyModal();
-
-      };
-
-
-    document.getElementById(
-      'btnDismissNotify'
-    ).onclick =
-      () => {
-
-        sessionStorage.setItem(
-          'cleansync_notify_dismissed',
-          '1'
-        );
-
-        showNotifyModal =
-          false;
-
-        renderNotifyModal();
-
-      };
-
-  }
-
-
-  renderInstallBanner();
-
-
-  setTimeout(
-    renderInstallBanner,
-    800
-  );
-
-
-  if(showNotifyModal){
-
-    setTimeout(
-      renderNotifyModal,
-      1000
-    );
-
-  }
-
-}
-
-
-/* ============================================================
-   SNACKBAR
-   ============================================================ */
+/* Snackbar */
 
 function showSnackbar(msg){
 
@@ -1708,7 +1512,9 @@ function showSnackbar(msg){
     el.className =
       'snackbar';
 
-    document.body.appendChild(el);
+    document.body.appendChild(
+      el
+    );
 
   }
 
@@ -1723,10 +1529,13 @@ function showSnackbar(msg){
 
 
   setTimeout(
-    () =>
+    () => {
+
       el.classList.remove(
         'show'
-      ),
+      );
+
+    },
     4000
   );
 
@@ -1734,8 +1543,8 @@ function showSnackbar(msg){
 
 
 /* ============================================================
-   FORMATAÇÃO
-   ============================================================ */
+   FORMATAÇÃO DE DATA
+============================================================ */
 
 function formatDate(
   dateString
@@ -1759,6 +1568,10 @@ function formatDate(
 }
 
 
+/* ============================================================
+   TEMPO
+============================================================ */
+
 function getElapsedTime(
   startIso
 ){
@@ -1767,7 +1580,9 @@ function getElapsedTime(
     Math.floor(
       (
         Date.now() -
-        new Date(startIso).getTime()
+        new Date(
+          startIso
+        ).getTime()
       ) / 1000
     );
 
@@ -1800,7 +1615,9 @@ function formatDuration(
 
   const m =
     Math.floor(
-      (totalSeconds % 3600) / 60
+      (
+        totalSeconds % 3600
+      ) / 60
     );
 
 
@@ -1817,6 +1634,10 @@ function formatDuration(
 }
 
 
+/* ============================================================
+   ESCAPE HTML
+============================================================ */
+
 function escapeHtml(str){
 
   if(str == null)
@@ -1826,14 +1647,24 @@ function escapeHtml(str){
   return String(str)
     .replace(
       /[&<>"']/g,
-      c =>
-        ({
-          '&':'&amp;',
-          '<':'&lt;',
-          '>':'&gt;',
-          '"':'&quot;',
-          "'":'&#39;'
-        }[c])
+      c => ({
+
+        '&':
+          '&amp;',
+
+        '<':
+          '&lt;',
+
+        '>':
+          '&gt;',
+
+        '"':
+          '&quot;',
+
+        "'":
+          '&#39;'
+
+      }[c])
     );
 
 }
@@ -1841,7 +1672,7 @@ function escapeHtml(str){
 
 /* ============================================================
    CHECKLIST PADRÃO
-   ============================================================ */
+============================================================ */
 
 async function getDefaultChecklist(){
 
@@ -1849,13 +1680,16 @@ async function getDefaultChecklist(){
     data,
     error
   } = await sb
-
-    .from('default_checklist')
-
-    .select('items')
-
-    .eq('id', 1)
-
+    .from(
+      'default_checklist'
+    )
+    .select(
+      'items'
+    )
+    .eq(
+      'id',
+      1
+    )
     .single();
 
 
@@ -1875,72 +1709,84 @@ async function getDefaultChecklist(){
 
 
 /* ============================================================
-   CRONÔMETROS ATIVOS
-   ============================================================ */
+   CRONÔMETROS
+============================================================ */
 
 const _activeTimerKeys =
   new Set();
 
 
-function attachTimers(list){
+function attachTimers(
+  list
+){
 
-  list.forEach(req => {
-
-    if(
-      req.status === 'in-progress' &&
-      req.work_start
-    ){
-
-      const start =
-        req.work_start;
-
-
-      const key =
-        'timer_' +
-        req.id +
-        '_' +
-        start;
-
+  list.forEach(
+    req => {
 
       if(
-        _activeTimerKeys.has(key)
-      )
-        return;
+        req.status ===
+          'in-progress' &&
+        req.work_start
+      ){
+
+        const start =
+          req.work_start;
 
 
-      _activeTimerKeys.add(key);
+        const key =
+          'timer_' +
+          req.id +
+          '_' +
+          start;
 
 
-      setInterval(
-        () => {
+        if(
+          _activeTimerKeys
+            .has(key)
+        ){
 
-          document
-            .querySelectorAll(
-              `[data-timer-start="${start}"]`
-            )
-            .forEach(el => {
+          return;
 
-              el.textContent =
-                getElapsedTime(
-                  start
-                );
+        }
 
-            });
 
-        },
-        1000
-      );
+        _activeTimerKeys
+          .add(key);
+
+
+        setInterval(
+          () => {
+
+            document
+              .querySelectorAll(
+                `[data-timer-start="${start}"]`
+              )
+              .forEach(
+                el => {
+
+                  el.textContent =
+                    getElapsedTime(
+                      start
+                    );
+
+                }
+              );
+
+          },
+          1000
+        );
+
+      }
 
     }
-
-  });
+  );
 
 }
 
 
 /* ============================================================
    ADMIN
-   ============================================================ */
+============================================================ */
 
 function _adminReload(){
 
@@ -1965,6 +1811,10 @@ function _adminReload(){
 }
 
 
+/* ============================================================
+   ADMIN — ALTERAR PREÇO
+============================================================ */
+
 async function adminEditPrice(
   id,
   currentPrice
@@ -1984,7 +1834,10 @@ async function adminEditPrice(
   const parsed =
     parseFloat(
       String(input)
-        .replace(',', '.')
+        .replace(
+          ',',
+          '.'
+        )
     );
 
 
@@ -2003,13 +1856,15 @@ async function adminEditPrice(
   const {
     error
   } = await sb
-
-    .from('cleaning_requests')
-
+    .from(
+      'cleaning_requests'
+    )
     .update({
-      price: parsed
-    })
 
+      price:
+        parsed
+
+    })
     .eq(
       'id',
       id
@@ -2038,6 +1893,10 @@ async function adminEditPrice(
 }
 
 
+/* ============================================================
+   ADMIN — EXCLUIR
+============================================================ */
+
 async function adminDeleteTask(
   id,
   label
@@ -2057,11 +1916,10 @@ async function adminDeleteTask(
   const {
     error
   } = await sb
-
-    .from('cleaning_requests')
-
+    .from(
+      'cleaning_requests'
+    )
     .delete()
-
     .eq(
       'id',
       id
@@ -2090,22 +1948,20 @@ async function adminDeleteTask(
 
 /* ============================================================
    CARTÃO DE TAREFA
-   ============================================================ */
+============================================================ */
 
 function renderTaskCard(
   req,
   mode
 ){
 
-  let timerHtml = '';
+  let timerHtml =
+    '';
 
-
-  /* ========================================================
-     CRONÔMETRO
-     ======================================================== */
 
   if(
-    req.status === 'in-progress' &&
+    req.status ===
+      'in-progress' &&
     req.work_start
   ){
 
@@ -2117,41 +1973,40 @@ function renderTaskCard(
           class="timer-display"
           data-timer-start="${req.work_start}"
         >
-          ${getElapsedTime(req.work_start)}
+          ${getElapsedTime(
+            req.work_start
+          )}
         </div>
 
         ${
           mode === 'cleaner' ||
           mode === 'admin'
 
-            ? `
+          ?
 
-              <div class="timer-controls">
+          `<div class="timer-controls">
 
-                <button
-                  class="btn btn-danger btn-lg"
-                  onclick="stopTimer('${req.id}')"
-                >
-                  ⏹ Finalizar trabalho
-                </button>
+            <button
+              class="btn btn-danger btn-lg"
+              onclick="stopTimer('${req.id}')"
+            >
+              ⏹ Finalizar trabalho
+            </button>
 
-              </div>
+          </div>`
 
-            `
+          :
 
-            : `
+          `<p
+            style="
+              font-size:12.5px;
+              color:var(--info);
+              margin-top:8px;
+            "
+          >
+            Trabalho em andamento…
+          </p>`
 
-              <p
-                style="
-                  font-size:12.5px;
-                  color:var(--info);
-                  margin-top:8px;
-                "
-              >
-                Trabalho em andamento…
-              </p>
-
-            `
         }
 
       </div>
@@ -2160,9 +2015,9 @@ function renderTaskCard(
 
   }
 
-
   else if(
-    req.status === 'pending' &&
+    req.status ===
+      'pending' &&
     (
       mode === 'cleaner' ||
       mode === 'admin'
@@ -2200,7 +2055,6 @@ function renderTaskCard(
 
   }
 
-
   else if(
     req.work_end &&
     req.work_start
@@ -2208,8 +2062,12 @@ function renderTaskCard(
 
     const duration =
       (
-        new Date(req.work_end) -
-        new Date(req.work_start)
+        new Date(
+          req.work_end
+        ) -
+        new Date(
+          req.work_start
+        )
       ) / 1000;
 
 
@@ -2224,7 +2082,9 @@ function renderTaskCard(
         "
       >
         ⏱️ Tempo total:
-        ${formatDuration(duration)}
+        ${formatDuration(
+          duration
+        )}
       </p>
 
     `;
@@ -2234,9 +2094,10 @@ function renderTaskCard(
 
   /* ========================================================
      FOTOS
-     ======================================================== */
+  ======================================================== */
 
-  let photosHtml = '';
+  let photosHtml =
+    '';
 
 
   if(
@@ -2249,17 +2110,19 @@ function renderTaskCard(
       <div class="photo-row">
 
         ${
-          req.photos.map(
-            p => `
+          req.photos
+            .map(
+              p => `
 
-              <img
-                src="${escapeHtml(p)}"
-                alt="foto"
-                onclick="window.open('${escapeHtml(p)}','_blank')"
-              >
+                <img
+                  src="${escapeHtml(p)}"
+                  alt="foto"
+                  onclick="window.open('${escapeHtml(p)}','_blank')"
+                >
 
-            `
-          ).join('')
+              `
+            )
+            .join('')
         }
 
       </div>
@@ -2271,9 +2134,10 @@ function renderTaskCard(
 
   /* ========================================================
      CHECKLIST
-     ======================================================== */
+  ======================================================== */
 
-  let checklistHtml = '';
+  let checklistHtml =
+    '';
 
 
   if(
@@ -2283,46 +2147,48 @@ function renderTaskCard(
 
     const total =
       (
-        req.checklist || []
+        req.checklist ||
+        []
       ).length;
 
 
     const done =
       (
-        req.checklist || []
-      )
-      .filter(
+        req.checklist ||
+        []
+      ).filter(
         i => i.done
-      )
-      .length;
+      ).length;
 
 
-    checklistHtml =
-      total
+    if(total){
 
-        ? `
+      checklistHtml = `
 
-          <div class="checklist">
+        <div class="checklist">
 
-            <h4>
-              Checklist
-            </h4>
+          <h4>
+            Checklist
+          </h4>
 
-            <div class="checklist-progress">
-              ${done} / ${total} concluídos
-            </div>
+          <div class="checklist-progress">
+            ${done} / ${total}
+            concluídos
+          </div>
 
-            ${
-              req.checklist.map(
+          ${
+            req.checklist
+              .map(
                 item => {
 
                   const isLaundry =
                     item.id === 'laundry' ||
-                    (
-                      item.label &&
-                      item.label.includes(
-                        'Lavagem de roupa'
-                      )
+                    String(
+                      item.label ||
+                      ''
+                    )
+                    .includes(
+                      'Lavagem de roupa'
                     );
 
 
@@ -2351,18 +2217,14 @@ function renderTaskCard(
                       <label
                         for="ck_${item.id}_${req.id}"
                       >
-                        ${escapeHtml(item.label)}
+                        ${escapeHtml(
+                          item.label
+                        )}
                       </label>
 
                       ${
                         isLaundry
-
-                          ? `
-                            <span class="plus">
-                              +10 CHF
-                            </span>
-                          `
-
+                          ? '<span class="plus">+10 CHF</span>'
                           : ''
                       }
 
@@ -2371,73 +2233,83 @@ function renderTaskCard(
                   `;
 
                 }
-              ).join('')
-            }
+              )
+              .join('')
+          }
 
-          </div>
+        </div>
 
 
-          <div class="field">
+        <div class="field">
 
-            <label>
-              Fotos (opcional)
-            </label>
+          <label>
+            Fotos (opcional)
+          </label>
 
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onchange="
-                uploadPhotos(
-                  '${req.id}',
-                  this
-                )
-              "
-            >
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onchange="
+              uploadPhotos(
+                '${req.id}',
+                this
+              )
+            "
+          >
 
-          </div>
+        </div>
 
-          ${photosHtml}
+        ${photosHtml}
 
-        `
+      `;
 
-        : '';
+    }
 
   }
 
 
   /* ========================================================
      AÇÕES
-     ======================================================== */
+  ======================================================== */
 
-  let actionsHtml = '';
+  let actionsHtml =
+    '';
 
-  let editFormHtml = '';
+
+  let editFormHtml =
+    '';
 
 
-  /*
-     CLIENTE
-  */
+  /* CLIENTE */
 
   if(
     mode === 'client' &&
     req.status === 'pending'
   ){
 
-    actionsHtml = `
+    actionsHtml += `
 
       <div class="task-actions">
 
         <button
           class="btn btn-outline"
-          onclick="toggleEditForm('${req.id}')"
+          onclick="
+            toggleEditForm(
+              '${req.id}'
+            )
+          "
         >
           Editar
         </button>
 
         <button
           class="btn btn-danger"
-          onclick="cancelRequest('${req.id}')"
+          onclick="
+            cancelRequest(
+              '${req.id}'
+            )
+          "
         >
           Cancelar
         </button>
@@ -2471,6 +2343,7 @@ function renderTaskCard(
 
           </div>
 
+
           <div class="field">
 
             <label>
@@ -2490,6 +2363,7 @@ function renderTaskCard(
           </div>
 
         </div>
+
 
         <div class="edit-actions">
 
@@ -2524,9 +2398,7 @@ function renderTaskCard(
   }
 
 
-  /*
-     PROFISSIONAL
-  */
+  /* PROFISSIONAL / ADMIN */
 
   if(
     (
@@ -2558,11 +2430,11 @@ function renderTaskCard(
   }
 
 
-  /*
-     ADMIN
-  */
+  /* ADMIN */
 
-  if(mode === 'admin'){
+  if(
+    mode === 'admin'
+  ){
 
     actionsHtml += `
 
@@ -2604,27 +2476,26 @@ function renderTaskCard(
 
 
   /* ========================================================
-     CHAT
-     ======================================================== */
+     BOTÃO CHAT
+  ======================================================== */
+
+  let chatHtml =
+    '';
+
 
   /*
-     O chat aparece para cliente,
-     profissional e administrador.
-
-     Para não alterar o restante do
-     layout, ele entra no bloco
-     task-actions.
+     Só mostra chat quando existe
+     cliente + profissional.
   */
 
   if(
-    mode === 'client' ||
-    mode === 'cleaner' ||
-    mode === 'admin'
+    req.client_id &&
+    req.professional_id
   ){
 
-    actionsHtml += `
+    chatHtml = `
 
-      <div class="task-actions">
+      <div class="task-actions chat-task-action">
 
         ${chatButtonHtml(req)}
 
@@ -2637,28 +2508,26 @@ function renderTaskCard(
 
   /* ========================================================
      STATUS
-     ======================================================== */
+  ======================================================== */
 
   const statusLabel =
     req.status === 'pending'
-
       ? 'Pendente'
-
       : req.status === 'in-progress'
-
         ? 'Em andamento'
-
         : 'Concluída';
 
 
   /* ========================================================
-     RETORNO DO CARD
-     ======================================================== */
+     HTML FINAL
+  ======================================================== */
 
   return `
 
     <div
-      class="task ${req.status}"
+      class="task ${escapeHtml(
+        req.status || ''
+      )}"
     >
 
       <div class="task-top">
@@ -2673,7 +2542,7 @@ function renderTaskCard(
 
           <div class="task-addr">
             ${escapeHtml(
-              req.address
+              req.address || ''
             )}
           </div>
 
@@ -2686,18 +2555,22 @@ function renderTaskCard(
             class="
               badge
               price
-              ${req.laundry_service
-                ? 'laundry'
-                : ''}
+              ${
+                req.laundry_service
+                  ? 'laundry'
+                  : ''
+              }
             "
           >
-            ${req.price} CHF
+            ${req.price || 0} CHF
           </span>
 
           <span
             class="
               badge
-              ${req.status}
+              ${escapeHtml(
+                req.status || ''
+              )}
             "
           >
             ${statusLabel}
@@ -2717,7 +2590,9 @@ function renderTaskCard(
           </div>
 
           <div class="value">
-            ${formatDate(req.date)}
+            ${formatDate(
+              req.date
+            )}
           </div>
 
         </div>
@@ -2747,7 +2622,10 @@ function renderTaskCard(
           </div>
 
           <div class="value">
-            ${req.stay_duration} dias
+            ${
+              req.stay_duration ||
+              0
+            } dias
           </div>
 
         </div>
@@ -2760,7 +2638,10 @@ function renderTaskCard(
           </div>
 
           <div class="value">
-            ${req.guest_count}
+            ${
+              req.guest_count ||
+              0
+            }
           </div>
 
         </div>
@@ -2789,25 +2670,31 @@ function renderTaskCard(
             mode === 'admin'
           )
 
-            ? `
+          ?
 
-              <div class="info-item">
+          `
 
-                <div class="label">
-                  Cliente
-                </div>
+            <div class="info-item">
 
-                <div class="value">
-                  ${escapeHtml(
-                    req.client_name
-                  )}
-                </div>
-
+              <div class="label">
+                Cliente
               </div>
 
-            `
+              <div class="value">
+                ${escapeHtml(
+                  req.client_name ||
+                  ''
+                )}
+              </div>
 
-            : ''
+            </div>
+
+          `
+
+          :
+
+          ''
+
         }
 
       </div>
@@ -2816,23 +2703,28 @@ function renderTaskCard(
       ${
         req.notes
 
-          ? `
+        ?
 
-            <div class="task-notes">
+        `
 
-              <strong>
-                Obs:
-              </strong>
+          <div class="task-notes">
 
-              ${escapeHtml(
-                req.notes
-              )}
+            <strong>
+              Obs:
+            </strong>
 
-            </div>
+            ${escapeHtml(
+              req.notes
+            )}
 
-          `
+          </div>
 
-          : ''
+        `
+
+        :
+
+        ''
+
       }
 
 
@@ -2852,6 +2744,9 @@ function renderTaskCard(
       ${actionsHtml}
 
 
+      ${chatHtml}
+
+
       ${editFormHtml}
 
     </div>
@@ -2859,3 +2754,441 @@ function renderTaskCard(
   `;
 
 }
+
+
+/* ============================================================
+   INSTALAÇÃO PWA + NOTIFICAÇÕES
+============================================================ */
+
+function setupInstallAndNotifyBanner(){
+
+  let deferredInstallPrompt =
+    null;
+
+
+  let showInstall =
+    false;
+
+
+  let showNotifyModal =
+    false;
+
+
+  window.addEventListener(
+    'beforeinstallprompt',
+    e => {
+
+      e.preventDefault();
+
+      deferredInstallPrompt =
+        e;
+
+      showInstall =
+        true;
+
+      renderInstallBanner();
+
+    }
+  );
+
+
+  window.addEventListener(
+    'appinstalled',
+    () => {
+
+      showInstall =
+        false;
+
+      renderInstallBanner();
+
+      showSnackbar(
+        '🎉 App instalado! Já pode acessar direto da tela inicial.'
+      );
+
+    }
+  );
+
+
+  if(
+    window.matchMedia(
+      '(display-mode: standalone)'
+    ).matches
+  ){
+
+    showInstall =
+      false;
+
+  }
+
+
+  const notifyDismissedThisSession =
+    sessionStorage.getItem(
+      'cleansync_notify_dismissed'
+    ) === '1';
+
+
+  if(
+    'Notification' in window &&
+    Notification.permission === 'default' &&
+    !notifyDismissedThisSession
+  ){
+
+    showNotifyModal =
+      true;
+
+  }
+
+
+  /* ========================================================
+     BARRA DE INSTALAÇÃO
+  ======================================================== */
+
+  function renderInstallBanner(){
+
+    let el =
+      document.getElementById(
+        'installBanner'
+      );
+
+
+    if(!showInstall){
+
+      if(el)
+        el.remove();
+
+      return;
+
+    }
+
+
+    if(el)
+      return;
+
+
+    el =
+      document.createElement(
+        'div'
+      );
+
+
+    el.id =
+      'installBanner';
+
+
+    el.className =
+      'install-banner';
+
+
+    el.innerHTML = `
+
+      <span class="install-banner-icon">
+        📲
+      </span>
+
+      <div class="install-banner-text">
+
+        <strong>
+          Instale o CleanSync
+        </strong>
+
+        <span>
+          Acesso rápido direto da tela inicial.
+        </span>
+
+      </div>
+
+      <button
+        class="btn btn-accent btn-sm"
+        id="btnInstallApp"
+      >
+        Instalar
+      </button>
+
+      <button
+        class="install-banner-close"
+        id="btnDismissInstall"
+        aria-label="Fechar"
+      >
+        ✕
+      </button>
+
+    `;
+
+
+    document.body.appendChild(
+      el
+    );
+
+
+    document
+      .getElementById(
+        'btnInstallApp'
+      )
+      .onclick =
+      async () => {
+
+        if(
+          !deferredInstallPrompt
+        ){
+
+          return;
+
+        }
+
+
+        deferredInstallPrompt
+          .prompt();
+
+
+        await deferredInstallPrompt
+          .userChoice;
+
+
+        deferredInstallPrompt =
+          null;
+
+
+        showInstall =
+          false;
+
+
+        renderInstallBanner();
+
+      };
+
+
+    document
+      .getElementById(
+        'btnDismissInstall'
+      )
+      .onclick =
+      () => {
+
+        showInstall =
+          false;
+
+        renderInstallBanner();
+
+      };
+
+  }
+
+
+  /* ========================================================
+     MODAL NOTIFICAÇÕES
+  ======================================================== */
+
+  function renderNotifyModal(){
+
+    let el =
+      document.getElementById(
+        'notifyOverlay'
+      );
+
+
+    if(!showNotifyModal){
+
+      if(el)
+        el.remove();
+
+      return;
+
+    }
+
+
+    if(el)
+      return;
+
+
+    el =
+      document.createElement(
+        'div'
+      );
+
+
+    el.id =
+      'notifyOverlay';
+
+
+    el.className =
+      'notify-overlay';
+
+
+    el.innerHTML = `
+
+      <div class="notify-modal">
+
+        <div class="notify-emoji">
+          🔔
+        </div>
+
+        <h3>
+          Não perca nenhuma novidade!
+        </h3>
+
+        <p>
+          Ative as notificações e saiba na hora
+          quando uma tarefa for criada,
+          iniciada ou concluída. 🧹✨
+        </p>
+
+        <div class="notify-actions">
+
+          <button
+            class="btn btn-accent"
+            id="btnActivateNotify"
+          >
+            ✅ Permitir notificações
+          </button>
+
+          <button
+            class="btn btn-ghost"
+            id="btnDismissNotify"
+          >
+            Agora não
+          </button>
+
+        </div>
+
+      </div>
+
+    `;
+
+
+    document.body.appendChild(
+      el
+    );
+
+
+    document
+      .getElementById(
+        'btnActivateNotify'
+      )
+      .onclick =
+      () => {
+
+        if(
+          window.OneSignalDeferred
+        ){
+
+          window
+            .OneSignalDeferred
+            .push(
+              function(OneSignal){
+
+                OneSignal
+                  .Slidedown
+                  .promptPush();
+
+              }
+            );
+
+        }
+
+        else if(
+          'Notification' in window
+        ){
+
+          Notification
+            .requestPermission();
+
+        }
+
+
+        showNotifyModal =
+          false;
+
+        renderNotifyModal();
+
+      };
+
+
+    document
+      .getElementById(
+        'btnDismissNotify'
+      )
+      .onclick =
+      () => {
+
+        sessionStorage.setItem(
+          'cleansync_notify_dismissed',
+          '1'
+        );
+
+
+        showNotifyModal =
+          false;
+
+
+        renderNotifyModal();
+
+      };
+
+  }
+
+
+  renderInstallBanner();
+
+
+  setTimeout(
+    renderInstallBanner,
+    800
+  );
+
+
+  if(showNotifyModal){
+
+    setTimeout(
+      renderNotifyModal,
+      1000
+    );
+
+  }
+
+}
+
+
+/* ============================================================
+   SERVICE WORKER
+============================================================ */
+
+function registerCleanSyncServiceWorker(){
+
+  if(
+    'serviceWorker' in navigator
+  ){
+
+    navigator
+      .serviceWorker
+      .register(
+        'service-worker.js'
+      )
+      .catch(
+        console.error
+      );
+
+  }
+
+}
+
+
+/* ============================================================
+   INICIALIZAÇÃO AUTOMÁTICA
+============================================================ */
+
+document.addEventListener(
+  'DOMContentLoaded',
+  () => {
+
+    /*
+       Não chamamos requireRole automaticamente,
+       porque cada página define seu próprio papel.
+    */
+
+  }
+);
+
+
+/* ============================================================
+   FIM DO APP-COMMON
+============================================================ */
