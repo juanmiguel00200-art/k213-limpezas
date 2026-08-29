@@ -1,367 +1,589 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-
-<head>
-<meta charset="UTF-8">
-
-<meta
-  name="viewport"
-  content="width=device-width, initial-scale=1.0"
+<!DOCTYPE html><html lang="pt-BR"><head>
+<meta charset="UTF-8"><meta
+name="viewport"
+content="width=device-width, initial-scale=1.0, viewport-fit=cover"
 />
 
-<title>CleanSync · Chat</title>
-
-<link rel="preconnect" href="https://fonts.googleapis.com">
-
-<link
+<title>CleanSync · Chat</title><link rel="preconnect" href="https://fonts.googleapis.com"><link
   href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
   rel="stylesheet"
->
+><link rel="manifest" href="manifest.json"><meta
+name="theme-color"
+content="#15151A"
 
-<link rel="manifest" href="manifest.json">
-
-<meta
-  name="theme-color"
-  content="#15151A"
->
+«»
 
 <link
   rel="stylesheet"
   href="style.css?v=10"
+><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script></head><body><div id="snackbar" class="snackbar"></div><!-- =========================================================
+     TOPO
+========================================================= --><div class="topbar">  <div class="brand"><div class="mark"></div>
+
+<div>
+  <div class="name">CleanSync</div>
+  <div class="sub">CHAT DA LIMPEZA</div>
+</div>
+
+  </div>  <div class="who"><span class="sync-dot">
+  <span class="dot"></span>
+  ONLINE
+</span>
+
+<span id="topWhoName"></span>
+
+<button
+  class="btn btn-ghost"
+  type="button"
+  onclick="goBack()"
+>
+  Voltar
+</button>
+
+  </div></div><!-- =========================================================
+     CONTEÚDO
+========================================================= --><div class="wrap">  <div class="page-hero"><div class="eyebrow">
+  COMUNICAÇÃO
+</div>
+
+<h1 id="chatTitle">
+  Chat
+</h1>
+
+<p
+  class="lede"
+  id="chatSubtitle"
+>
+  Conversa relacionada à limpeza.
+</p>
+
+  </div>  <!-- =======================================================
+       CHAT
+  ======================================================== -->  <div class="card chat-card"><div
+  id="messages"
+  class="chat-messages"
 >
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <div class="chat-loading">
 
-</head>
+    <div class="loading-spinner"></div>
 
-<body>
-
-<div id="snackbar" class="snackbar"></div>
-
-
-<!-- ======================================================
-     TOPO
-====================================================== -->
-
-<div class="topbar">
-
-  <div class="brand">
-
-    <div class="mark"></div>
-
-    <div>
-      <div class="name">CleanSync</div>
-      <div class="sub">CHAT DA LIMPEZA</div>
-    </div>
-
-  </div>
-
-
-  <div class="who">
-
-    <span class="sync-dot">
-      <span class="dot"></span>
-      ONLINE
+    <span>
+      Carregando conversa...
     </span>
 
-    <span id="topWhoName"></span>
-
-    <button
-      class="btn btn-ghost"
-      onclick="goBack()"
-    >
-      Voltar
-    </button>
-
   </div>
 
 </div>
 
 
-
-<!-- ======================================================
-     CONTEÚDO
+<!-- =====================================================
+     DIGITAÇÃO
 ====================================================== -->
 
-<div class="wrap">
+<form
+  id="messageForm"
+  class="chat-input-area"
+>
 
-  <div class="page-hero">
+  <textarea
+    id="messageInput"
+    rows="1"
+    maxlength="2000"
+    placeholder="Digite uma mensagem..."
+    autocomplete="off"
+    aria-label="Mensagem"
+  ></textarea>
 
-    <div class="eyebrow">
-      COMUNICAÇÃO
-    </div>
+  <button
+    type="submit"
+    class="btn btn-accent chat-send"
+    id="sendButton"
+    aria-label="Enviar mensagem"
+  >
+    ➤
+  </button>
 
-    <h1 id="chatTitle">
-      Chat
-    </h1>
+</form>
 
-    <p
-      class="lede"
-      id="chatSubtitle"
-    >
-      Conversa relacionada à limpeza.
-    </p>
+  </div></div><script src="app-common.js?v=10"></script><script>
 
-  </div>
+/* ============================================================
+   CleanSync — CHAT
+   Compatível com:
+   - app-common.js
+   - cleaning_requests
+   - conversations
+   - messages
+   - Realtime
+============================================================ */
 
-
-
-  <!-- ====================================================
-       CHAT
-  ===================================================== -->
-
-  <div class="card chat-card">
-
-    <div
-      id="messages"
-      class="chat-messages"
-    >
-
-      <div class="empty">
-        Carregando conversa...
-      </div>
-
-    </div>
-
-
-    <!-- DIGITAÇÃO -->
-
-    <form
-      id="messageForm"
-      class="chat-input-area"
-    >
-
-      <textarea
-        id="messageInput"
-        rows="1"
-        maxlength="2000"
-        placeholder="Digite uma mensagem..."
-        autocomplete="off"
-      ></textarea>
-
-
-      <button
-        type="submit"
-        class="btn btn-accent chat-send"
-        id="sendButton"
-      >
-        ➤
-      </button>
-
-    </form>
-
-  </div>
-
-</div>
-
-
-
-<script src="app-common.js?v=10"></script>
-
-
-<script>
 
 let currentUser = null;
 let currentProfile = null;
 
 let conversationId = null;
-let realtimeChannel = null;
-
 let cleaningId = null;
 
-
-// ==========================================================
-// INICIALIZAÇÃO
-// ==========================================================
-
-(async function init(){
-
-  const ctx = await requireRole();
-
-  if (!ctx) return;
-
-  currentUser = ctx.user;
-  currentProfile = ctx.profile;
+let chatRealtimeChannel = null;
 
 
-  // Nome no topo
-  const topName =
-    document.getElementById('topWhoName');
+/* ============================================================
+   INICIALIZAÇÃO
+============================================================ */
 
-  if (topName) {
-    topName.textContent =
-      currentProfile.full_name ||
-      currentUser.email ||
-      '';
-  }
-
-
-  // ID da limpeza pela URL
-  const params =
-    new URLSearchParams(window.location.search);
-
-  cleaningId =
-    params.get('task');
-
-
-  if (!cleaningId) {
-
-    showError(
-      'Nenhuma limpeza foi selecionada.'
-    );
-
-    return;
-  }
-
-
-  // Carrega conversa
-  await initializeConversation();
-
-})();
-
-
-// ==========================================================
-// CRIAR / OBTER CONVERSA
-// ==========================================================
-
-async function initializeConversation(){
+(async function initChat(){
 
   try {
 
-    const { data, error } =
-      await sb.rpc(
-        'create_cleaning_conversation',
-        {
-          p_cleaning_id: cleaningId
-        }
-      );
+    /*
+      O seu app-common.js usa uma sessão própria
+      armazenada em localStorage.
 
+      Portanto NÃO usamos Supabase Auth aqui.
+    */
 
-    if (error) {
-      throw error;
+    const session = getSession();
+
+    if (!session) {
+
+      window.location.href = 'index.html';
+
+      return;
+
     }
 
 
-    conversationId = data;
+    currentUser = {
+      id: session.id,
+      email: session.username || ''
+    };
 
 
-    // Carrega informações da limpeza
-    await loadCleaning();
+    currentProfile = {
+      id: session.id,
+      full_name: session.name || session.full_name || '',
+      name: session.name || session.full_name || '',
+      role: session.role || ''
+    };
 
 
-    // Carrega mensagens existentes
-    await loadMessages();
+    /* ========================================================
+       NOME NO TOPO
+    ======================================================== */
+
+    const topName =
+      document.getElementById('topWhoName');
+
+    if (topName) {
+
+      topName.textContent =
+        currentProfile.full_name ||
+        currentProfile.name ||
+        currentUser.email ||
+        'Usuário';
+
+    }
 
 
-    // Ativa realtime
-    subscribeToMessages();
+    /* ========================================================
+       LIMPEZA VINDO DA URL
+       
+       Exemplos:
+       
+       chat.html?task=UUID
+       chat.html?cleaning=UUID
+    ======================================================== */
+
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
 
 
-    // Ajusta interface
-    setupInput();
+    cleaningId =
+      params.get('task') ||
+      params.get('cleaning') ||
+      params.get('id');
+
+
+    if (!cleaningId) {
+
+      showError(
+        'Nenhuma limpeza foi selecionada.'
+      );
+
+      return;
+
+    }
+
+
+    /* ========================================================
+       ABRIR CHAT
+    ======================================================== */
+
+    await initializeConversation();
 
   }
 
   catch(error){
 
-    console.error(error);
+    console.error(
+      'Erro ao iniciar chat:',
+      error
+    );
 
     showError(
-      'Não foi possível abrir o chat: ' +
-      error.message
+      error?.message ||
+      'Não foi possível iniciar o chat.'
     );
 
   }
 
-}
+})();
 
 
-// ==========================================================
-// INFORMAÇÕES DA LIMPEZA
-// ==========================================================
+/* ============================================================
+   INICIALIZAR CONVERSA
+============================================================ */
 
-async function loadCleaning(){
+async function initializeConversation(){
 
-  const { data, error } =
-    await sb
-      .from('cleaning_requests')
-      .select(`
-        id,
-        ref_code,
-        client_name,
-        address,
-        date,
-        professional_id,
-        client_id
-      `)
-      .eq('id', cleaningId)
-      .single();
+  /*
+    Primeiro verificamos se a limpeza existe
+    e se o usuário participa dela.
+  */
+
+  const {
+    data: cleaning,
+    error: cleaningError
+  } = await sb
+    .from('cleaning_requests')
+    .select(`
+      id,
+      ref_code,
+      client_name,
+      address,
+      date,
+      time,
+      professional_id,
+      client_id,
+      status
+    `)
+    .eq(
+      'id',
+      cleaningId
+    )
+    .single();
 
 
-  if (error) {
+  if (cleaningError) {
 
-    console.error(error);
+    throw new Error(
+      'Não foi possível encontrar esta limpeza: ' +
+      cleaningError.message
+    );
 
-    return;
   }
 
 
+  if (!cleaning) {
+
+    throw new Error(
+      'Limpeza não encontrada.'
+    );
+
+  }
+
+
+  /* ==========================================================
+     SEGURANÇA
+     
+     Somente cliente, profissional ou admin podem abrir.
+  ========================================================== */
+
+  const isAdmin =
+    currentProfile.role === 'admin';
+
+
+  const isClient =
+    cleaning.client_id === currentUser.id;
+
+
+  const isProfessional =
+    cleaning.professional_id === currentUser.id;
+
+
+  if (
+    !isAdmin &&
+    !isClient &&
+    !isProfessional
+  ){
+
+    throw new Error(
+      'Você não participa desta limpeza.'
+    );
+
+  }
+
+
+  /* ==========================================================
+     INTERFACE
+  ========================================================== */
+
+  updateCleaningHeader(
+    cleaning
+  );
+
+
+  /* ==========================================================
+     BUSCAR CONVERSA EXISTENTE
+  ========================================================== */
+
+  let {
+    data: conversation,
+    error: conversationError
+  } = await sb
+    .from('conversations')
+    .select(`
+      id,
+      cleaning_id,
+      client_id,
+      professional_id,
+      created_at
+    `)
+    .eq(
+      'cleaning_id',
+      cleaningId
+    )
+    .maybeSingle();
+
+
+  if (conversationError) {
+
+    throw new Error(
+      'Erro ao procurar a conversa: ' +
+      conversationError.message
+    );
+
+  }
+
+
+  /* ==========================================================
+     SE NÃO EXISTIR, CRIAR
+  ========================================================== */
+
+  if (!conversation) {
+
+    const {
+      data: newConversation,
+      error: createError
+    } = await sb
+      .from('conversations')
+      .insert({
+
+        cleaning_id:
+          cleaning.id,
+
+        client_id:
+          cleaning.client_id,
+
+        professional_id:
+          cleaning.professional_id
+
+      })
+      .select(`
+        id,
+        cleaning_id,
+        client_id,
+        professional_id,
+        created_at
+      `)
+      .single();
+
+
+    if (createError) {
+
+      /*
+        Pode acontecer de outra pessoa ter criado
+        exatamente ao mesmo tempo.
+
+        Então tentamos buscar novamente.
+      */
+
+      const retry =
+        await sb
+          .from('conversations')
+          .select(`
+            id,
+            cleaning_id,
+            client_id,
+            professional_id,
+            created_at
+          `)
+          .eq(
+            'cleaning_id',
+            cleaningId
+          )
+          .maybeSingle();
+
+
+      if (retry.error || !retry.data) {
+
+        throw new Error(
+          'Não foi possível criar a conversa: ' +
+          createError.message
+        );
+
+      }
+
+
+      conversation =
+        retry.data;
+
+    }
+
+    else {
+
+      conversation =
+        newConversation;
+
+    }
+
+  }
+
+
+  conversationId =
+    conversation.id;
+
+
+  /* ==========================================================
+     MENSAGENS
+  ========================================================== */
+
+  await loadMessages();
+
+
+  /* ==========================================================
+     REALTIME
+  ========================================================== */
+
+  subscribeToMessages();
+
+
+  /* ==========================================================
+     INPUT
+  ========================================================== */
+
+  setupInput();
+
+}
+
+
+/* ============================================================
+   CABEÇALHO DA LIMPEZA
+============================================================ */
+
+function updateCleaningHeader(cleaning){
+
   const title =
-    document.getElementById('chatTitle');
+    document.getElementById(
+      'chatTitle'
+    );
 
   const subtitle =
-    document.getElementById('chatSubtitle');
+    document.getElementById(
+      'chatSubtitle'
+    );
 
 
   if (title) {
 
     title.textContent =
       'Chat · ' +
-      (data.ref_code || 'Limpeza');
+      (
+        cleaning.ref_code ||
+        'Limpeza'
+      );
 
   }
 
 
   if (subtitle) {
 
-    subtitle.textContent =
-      data.address ||
+    const address =
+      cleaning.address ||
       'Conversa da limpeza';
+
+
+    const date =
+      cleaning.date
+        ? formatDate(cleaning.date)
+        : '';
+
+
+    subtitle.textContent =
+      date
+        ? `${address} · ${date}`
+        : address;
 
   }
 
 }
 
 
-// ==========================================================
-// CARREGAR MENSAGENS
-// ==========================================================
+/* ============================================================
+   CARREGAR MENSAGENS
+============================================================ */
 
 async function loadMessages(){
 
   const container =
-    document.getElementById('messages');
+    document.getElementById(
+      'messages'
+    );
 
 
-  const { data, error } =
-    await sb
-      .from('messages')
-      .select(`
-        id,
-        sender_id,
-        content,
-        created_at
-      `)
-      .eq(
-        'conversation_id',
-        conversationId
-      )
-      .order(
-        'created_at',
-        {
-          ascending: true
-        }
-      );
+  if (!container) return;
+
+
+  container.innerHTML = `
+
+    <div class="chat-loading">
+
+      <div class="loading-spinner"></div>
+
+      <span>
+        Carregando mensagens...
+      </span>
+
+    </div>
+
+  `;
+
+
+  const {
+    data,
+    error
+  } = await sb
+    .from('messages')
+    .select(`
+      id,
+      conversation_id,
+      sender_id,
+      content,
+      created_at
+    `)
+    .eq(
+      'conversation_id',
+      conversationId
+    )
+    .order(
+      'created_at',
+      {
+        ascending: true
+      }
+    );
 
 
   if (error) {
@@ -372,32 +594,28 @@ async function loadMessages(){
     );
 
     return;
+
   }
 
 
-  if (!data || !data.length){
+  if (
+    !data ||
+    data.length === 0
+  ){
 
-    container.innerHTML = `
-      <div class="chat-empty">
-        <div class="chat-empty-icon">💬</div>
-
-        <strong>
-          Inicie a conversa
-        </strong>
-
-        <span>
-          Envie uma mensagem para o outro participante desta limpeza.
-        </span>
-      </div>
-    `;
+    renderEmptyChat();
 
     return;
+
   }
 
 
   container.innerHTML =
     data
-      .map(renderMessage)
+      .map(
+        message =>
+          renderMessage(message)
+      )
       .join('');
 
 
@@ -406,18 +624,57 @@ async function loadMessages(){
 }
 
 
-// ==========================================================
-// RENDERIZAR MENSAGEM
-// ==========================================================
+/* ============================================================
+   ESTADO VAZIO
+============================================================ */
+
+function renderEmptyChat(){
+
+  const container =
+    document.getElementById(
+      'messages'
+    );
+
+
+  container.innerHTML = `
+
+    <div class="chat-empty">
+
+      <div class="chat-empty-icon">
+        💬
+      </div>
+
+      <strong>
+        Inicie a conversa
+      </strong>
+
+      <span>
+        Envie uma mensagem para o
+        outro participante desta limpeza.
+      </span>
+
+    </div>
+
+  `;
+
+}
+
+
+/* ============================================================
+   RENDERIZAR MENSAGEM
+============================================================ */
 
 function renderMessage(message){
 
   const mine =
-    message.sender_id === currentUser.id;
+    String(message.sender_id) ===
+    String(currentUser.id);
 
 
   const date =
-    new Date(message.created_at);
+    new Date(
+      message.created_at
+    );
 
 
   const time =
@@ -433,9 +690,8 @@ function renderMessage(message){
   return `
 
     <div
-      class="chat-message
-      ${mine ? 'mine' : 'theirs'}"
-      data-message-id="${message.id}"
+      class="chat-message ${mine ? 'mine' : 'theirs'}"
+      data-message-id="${escapeHtml(message.id)}"
     >
 
       <div class="chat-bubble">
@@ -457,28 +713,34 @@ function renderMessage(message){
 }
 
 
-// ==========================================================
-// REALTIME
-// ==========================================================
+/* ============================================================
+   REALTIME
+============================================================ */
 
 function subscribeToMessages(){
 
   if (!conversationId) return;
 
 
-  if (realtimeChannel){
+  /* Remove canal anterior */
+
+  if (chatRealtimeChannel){
 
     sb.removeChannel(
-      realtimeChannel
+      chatRealtimeChannel
     );
+
+    chatRealtimeChannel =
+      null;
 
   }
 
 
-  realtimeChannel =
+  chatRealtimeChannel =
     sb
       .channel(
-        'chat-' + conversationId
+        'cleansync-chat-' +
+        conversationId
       )
 
 
@@ -488,11 +750,15 @@ function subscribeToMessages(){
 
         {
           event: 'INSERT',
+
           schema: 'public',
+
           table: 'messages',
+
           filter:
             'conversation_id=eq.' +
             conversationId
+
         },
 
         payload => {
@@ -501,14 +767,18 @@ function subscribeToMessages(){
             payload.new;
 
 
-          // Evita duplicação
-          if (
+          if (!message) return;
+
+
+          /* Evitar duplicação */
+
+          const existing =
             document.querySelector(
               `[data-message-id="${message.id}"]`
-            )
-          ) {
-            return;
-          }
+            );
+
+
+          if (existing) return;
 
 
           const container =
@@ -517,14 +787,21 @@ function subscribeToMessages(){
             );
 
 
-          // Remove estado vazio
+          if (!container) return;
+
+
+          /* Remove estado vazio */
+
           const empty =
             container.querySelector(
               '.chat-empty'
             );
 
-          if (empty) {
+
+          if (empty){
+
             container.innerHTML = '';
+
           }
 
 
@@ -542,27 +819,27 @@ function subscribeToMessages(){
 
 
       .subscribe(
-
         status => {
 
           console.log(
-            'Chat realtime:',
+            'CleanSync Chat:',
             status
           );
 
         }
-
       );
 
 }
 
 
-// ==========================================================
-// ENVIAR MENSAGEM
-// ==========================================================
+/* ============================================================
+   ENVIAR MENSAGEM
+============================================================ */
 
 document
-  .getElementById('messageForm')
+  .getElementById(
+    'messageForm'
+  )
   .addEventListener(
     'submit',
     sendMessage
@@ -574,13 +851,14 @@ async function sendMessage(event){
   event.preventDefault();
 
 
-  if (!conversationId) {
+  if (!conversationId){
 
     showSnackbar(
-      'Chat ainda não está pronto.'
+      'O chat ainda não está pronto.'
     );
 
     return;
+
   }
 
 
@@ -596,6 +874,9 @@ async function sendMessage(event){
     );
 
 
+  if (!input) return;
+
+
   const content =
     input.value.trim();
 
@@ -603,12 +884,30 @@ async function sendMessage(event){
   if (!content) return;
 
 
-  input.disabled = true;
-  button.disabled = true;
+  if (content.length > 2000){
+
+    showSnackbar(
+      'A mensagem é muito grande.'
+    );
+
+    return;
+
+  }
 
 
-  const { error } =
-    await sb
+  input.disabled =
+    true;
+
+  button.disabled =
+    true;
+
+
+  try {
+
+    const {
+      data,
+      error
+    } = await sb
       .from('messages')
       .insert({
 
@@ -621,37 +920,111 @@ async function sendMessage(event){
         content:
           content
 
-      });
+      })
+      .select(`
+        id,
+        conversation_id,
+        sender_id,
+        content,
+        created_at
+      `)
+      .single();
 
 
-  input.disabled = false;
-  button.disabled = false;
+    if (error){
+
+      throw error;
+
+    }
 
 
-  if (error){
+    /*
+      O Realtime também vai receber essa mensagem.
 
-    console.error(error);
+      Porém adicionamos imediatamente na tela
+      para deixar a experiência mais rápida.
+    */
 
-    showSnackbar(
-      'Erro ao enviar mensagem.'
-    );
+    const existing =
+      document.querySelector(
+        `[data-message-id="${data.id}"]`
+      );
 
-    return;
+
+    if (!existing){
+
+      const container =
+        document.getElementById(
+          'messages'
+        );
+
+
+      const empty =
+        container.querySelector(
+          '.chat-empty'
+        );
+
+
+      if (empty){
+
+        container.innerHTML = '';
+
+      }
+
+
+      container.insertAdjacentHTML(
+        'beforeend',
+        renderMessage(data)
+      );
+
+
+      scrollMessages();
+
+    }
+
+
+    input.value = '';
+
+    autoResizeInput();
+
+    input.focus();
+
   }
 
+  catch(error){
 
-  input.value = '';
+    console.error(
+      'Erro ao enviar:',
+      error
+    );
 
-  autoResizeInput();
 
-  input.focus();
+    showSnackbar(
+      'Erro ao enviar mensagem: ' +
+      (
+        error?.message ||
+        'tente novamente'
+      )
+    );
+
+  }
+
+  finally {
+
+    input.disabled =
+      false;
+
+    button.disabled =
+      false;
+
+  }
 
 }
 
 
-// ==========================================================
-// INPUT
-// ==========================================================
+/* ============================================================
+   INPUT
+============================================================ */
 
 function setupInput(){
 
@@ -659,6 +1032,9 @@ function setupInput(){
     document.getElementById(
       'messageInput'
     );
+
+
+  if (!input) return;
 
 
   input.addEventListener(
@@ -671,12 +1047,20 @@ function setupInput(){
     'keydown',
     event => {
 
+      /*
+        Enter = enviar
+
+        Shift + Enter =
+        nova linha
+      */
+
       if (
         event.key === 'Enter' &&
         !event.shiftKey
       ){
 
         event.preventDefault();
+
 
         document
           .getElementById(
@@ -700,7 +1084,12 @@ function autoResizeInput(){
     );
 
 
-  input.style.height = 'auto';
+  if (!input) return;
+
+
+  input.style.height =
+    'auto';
+
 
   input.style.height =
     Math.min(
@@ -711,9 +1100,9 @@ function autoResizeInput(){
 }
 
 
-// ==========================================================
-// SCROLL
-// ==========================================================
+/* ============================================================
+   SCROLL
+============================================================ */
 
 function scrollMessages(){
 
@@ -721,6 +1110,9 @@ function scrollMessages(){
     document.getElementById(
       'messages'
     );
+
+
+  if (!container) return;
 
 
   requestAnimationFrame(() => {
@@ -733,35 +1125,52 @@ function scrollMessages(){
 }
 
 
-// ==========================================================
-// VOLTAR
-// ==========================================================
+/* ============================================================
+   VOLTAR
+============================================================ */
 
 function goBack(){
 
   if (
     currentProfile &&
-    currentProfile.role === 'professional'
+    currentProfile.role === 'admin'
+  ){
+
+    window.location.href =
+      'admin.html';
+
+    return;
+
+  }
+
+
+  if (
+    currentProfile &&
+    (
+      currentProfile.role ===
+      'profissional' ||
+      currentProfile.role ===
+      'professional'
+    )
   ){
 
     window.location.href =
       'profissional.html';
 
-  }
-
-  else {
-
-    window.location.href =
-      'cliente.html';
+    return;
 
   }
+
+
+  window.location.href =
+    'cliente.html';
 
 }
 
 
-// ==========================================================
-// ERRO
-// ==========================================================
+/* ============================================================
+   ERRO
+============================================================ */
 
 function showError(message){
 
@@ -771,11 +1180,32 @@ function showError(message){
     );
 
 
+  if (!container) return;
+
+
   container.innerHTML = `
 
-    <div class="empty">
+    <div class="chat-error">
 
-      ${escapeHtml(message)}
+      <div class="chat-error-icon">
+        ⚠️
+      </div>
+
+      <strong>
+        Não foi possível abrir o chat
+      </strong>
+
+      <span>
+        ${escapeHtml(message)}
+      </span>
+
+      <button
+        type="button"
+        class="btn btn-outline"
+        onclick="goBack()"
+      >
+        Voltar
+      </button>
 
     </div>
 
@@ -783,22 +1213,47 @@ function showError(message){
 
 }
 
-</script>
 
+/* ============================================================
+   LIMPEZA DO REALTIME
+============================================================ */
 
-<style>
+window.addEventListener(
+  'beforeunload',
+  () => {
+
+    if (chatRealtimeChannel){
+
+      sb.removeChannel(
+        chatRealtimeChannel
+      );
+
+      chatRealtimeChannel =
+        null;
+
+    }
+
+  }
+);
+
+</script><style>
 
 /* ==========================================================
-   CHAT — COMPONENTE
+   CHAT
 ========================================================== */
 
 .chat-card{
+
   padding:0;
+
   overflow:hidden;
+
 }
 
 
-/* Área das mensagens */
+/* ==========================================================
+   MENSAGENS
+========================================================== */
 
 .chat-messages{
 
@@ -826,7 +1281,9 @@ function showError(message){
 }
 
 
-/* Mensagem */
+/* ==========================================================
+   MENSAGEM
+========================================================== */
 
 .chat-message{
 
@@ -851,7 +1308,9 @@ function showError(message){
 }
 
 
-/* Balão */
+/* ==========================================================
+   BALÃO
+========================================================== */
 
 .chat-bubble{
 
@@ -867,6 +1326,10 @@ function showError(message){
   border:1px solid var(--border);
 
   background:var(--dark3);
+
+  box-shadow:
+    0 4px 14px
+    rgba(0,0,0,.08);
 
 }
 
@@ -897,7 +1360,9 @@ function showError(message){
 }
 
 
-/* Texto */
+/* ==========================================================
+   TEXTO
+========================================================== */
 
 .chat-content{
 
@@ -914,7 +1379,9 @@ function showError(message){
 }
 
 
-/* Horário */
+/* ==========================================================
+   HORÁRIO
+========================================================== */
 
 .chat-time{
 
@@ -931,7 +1398,9 @@ function showError(message){
 }
 
 
-/* Input */
+/* ==========================================================
+   INPUT
+========================================================== */
 
 .chat-input-area{
 
@@ -1005,7 +1474,9 @@ function showError(message){
 }
 
 
-/* Estado vazio */
+/* ==========================================================
+   VAZIO
+========================================================== */
 
 .chat-empty{
 
@@ -1059,6 +1530,120 @@ function showError(message){
 }
 
 
+/* ==========================================================
+   LOADING
+========================================================== */
+
+.chat-loading{
+
+  min-height:360px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  align-items:center;
+
+  justify-content:center;
+
+  gap:12px;
+
+  color:var(--muted);
+
+  font-size:13px;
+
+}
+
+
+.loading-spinner{
+
+  width:28px;
+
+  height:28px;
+
+  border-radius:50%;
+
+  border:3px solid var(--border);
+
+  border-top-color:var(--pink);
+
+  animation:
+    chatSpin
+    .8s linear infinite;
+
+}
+
+
+@keyframes chatSpin{
+
+  to{
+
+    transform:
+      rotate(360deg);
+
+  }
+
+}
+
+
+/* ==========================================================
+   ERRO
+========================================================== */
+
+.chat-error{
+
+  min-height:360px;
+
+  display:flex;
+
+  flex-direction:column;
+
+  align-items:center;
+
+  justify-content:center;
+
+  text-align:center;
+
+  gap:10px;
+
+  padding:30px;
+
+}
+
+
+.chat-error-icon{
+
+  font-size:42px;
+
+}
+
+
+.chat-error strong{
+
+  color:var(--cream);
+
+  font-size:18px;
+
+}
+
+
+.chat-error span{
+
+  color:var(--muted);
+
+  max-width:500px;
+
+  font-size:13px;
+
+  line-height:1.5;
+
+}
+
+
+/* ==========================================================
+   MOBILE
+========================================================== */
+
 @media(max-width:600px){
 
   .chat-messages{
@@ -1090,24 +1675,32 @@ function showError(message){
 
   }
 
+
+  .topbar{
+
+    gap:8px;
+
+  }
+
 }
 
-</style>
+</style><script>
 
+/* ============================================================
+   SERVICE WORKER
+============================================================ */
 
-<script>
-
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator){
 
   navigator.serviceWorker
     .register(
       'service-worker.js'
     )
-    .catch(console.error);
+    .catch(
+      console.error
+    );
 
 }
 
-</script>
-
-</body>
+</script></body>
 </html>
