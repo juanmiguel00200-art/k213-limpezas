@@ -33,6 +33,7 @@ const SUPABASE_URL =
   'https://oyxmrrazgjdnyzhyinhc.supabase.co';
 
 const SUPABASE_ANON_KEY =
+
 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 
 
