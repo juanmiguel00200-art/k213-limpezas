@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
@@ -65,9 +65,13 @@
       <div class="field">
         <label>Esta conta é de</label>
         <div class="role-toggle">
-          <label><input type="radio" name="signupRole" value="cliente" checked> Cliente</label>
-          <label><input type="radio" name="signupRole" value="profissional"> Profissional</label>
+          <label><input type="radio" name="signupRole" value="cliente" checked onchange="toggleSignupAddressField()"> Cliente</label>
+          <label><input type="radio" name="signupRole" value="profissional" onchange="toggleSignupAddressField()"> Profissional</label>
         </div>
+      </div>
+      <div class="field" id="signupAddressField">
+        <label>Endereço do imóvel</label>
+        <input type="text" id="signupAddress" placeholder="Digite o endereço completo">
       </div>
       <button type="submit" class="btn btn-accent" style="width:100%">Criar conta</button>
     </form>
@@ -95,7 +99,7 @@
   </div>
 </div>
 
-<script src="app-common.js?v=7"></script>
+<script src="app-common.js?v=8"></script>
 <script>
 if (!APP_CONFIGURED) renderSetupWarning();
 
@@ -110,6 +114,11 @@ const notes = {
   signup: 'Ao criar a conta, você recebe um <strong>código de recuperação</strong> — anote e guarde em lugar seguro. É a única forma de trocar sua senha se esquecer.',
   recover: 'Cole aqui exatamente o código que apareceu quando você criou sua conta (ex: <code>AB3D-9F2K</code>). Ao redefinir, um novo código será gerado — o antigo deixa de funcionar.'
 };
+
+function toggleSignupAddressField(){
+  const isClient = document.querySelector('input[name=signupRole]:checked').value === 'cliente';
+  document.getElementById('signupAddressField').style.display = isClient ? 'block' : 'none';
+}
 
 function switchTab(tab){
   ['login','signup','recover'].forEach(t => {
@@ -129,7 +138,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   try {
     const user = await entrarComSenha(username, password);
     const password_hash = await sha256Hex(password);
-    setSession({ id: user.id, username: user.username, name: user.name, role: user.role, password_hash });
+    setSession({ id: user.id, username: user.username, name: user.name, role: user.role, password_hash, address: user.address });
     window.location.href = user.role === 'admin' ? 'admin.html' : user.role === 'profissional' ? 'profissional.html' : 'cliente.html';
   } catch (err) {
     alert(err.message);
@@ -144,12 +153,13 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
   const username = document.getElementById('signupUsername').value.trim();
   const password = document.getElementById('signupPassword').value;
   const role = document.querySelector('input[name=signupRole]:checked').value;
+  const address = document.getElementById('signupAddress').value.trim();
 
   btn.disabled = true; btn.textContent = 'Criando...';
   try {
-    const { user, recovery_code } = await criarConta(name, username, password, role);
+    const { user, recovery_code } = await criarConta(name, username, password, role, address);
     alert('✅ Conta criada!\n\nGUARDE SEU CÓDIGO DE RECUPERAÇÃO:\n\n' + recovery_code + '\n\nVocê vai precisar dele se esquecer sua senha. Não existe outra forma de recuperar.');
-    setSession({ id: user.id, username: user.username, name: user.name, role: user.role });
+    setSession({ id: user.id, username: user.username, name: user.name, role: user.role, address: user.address });
     window.location.href = user.role === 'profissional' ? 'profissional.html' : 'cliente.html';
   } catch (err) {
     alert(err.message);
