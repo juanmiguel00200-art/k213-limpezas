@@ -1,7 +1,7 @@
 {
-  "name": "K213 — Coordenação de Limpezas",
-  "short_name": "K213",
-  "description": "Könizstrasse 213, Liebefeld — coordenação de limpezas entre cliente e profissional.",
+  "name": "CleanSync — Coordenação de Limpezas",
+  "short_name": "CleanSync",
+  "description": "Coordenação de limpezas entre cliente e profissional, sincronizada em tempo real.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
