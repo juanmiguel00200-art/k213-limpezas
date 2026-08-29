@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>K213 · Painel do Cliente</title>
+<title>CleanSync · Painel do Cliente</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=7">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
@@ -29,7 +29,7 @@
 <div class="topbar">
   <div class="brand">
     <div class="mark"></div>
-    <div><div class="name">K213</div><div class="sub">PAINEL DO CLIENTE</div></div>
+    <div><div class="name">CleanSync</div><div class="sub">PAINEL DO CLIENTE</div></div>
   </div>
   <div class="who">
     <span class="sync-dot"><span class="dot"></span>SINCRONIZADO</span>
@@ -40,7 +40,7 @@
 
 <div class="wrap">
   <div class="page-hero">
-    <div class="eyebrow">KÖNIZSTRASSE 213 · LIEBEFELD</div>
+    <div class="eyebrow">COORDENAÇÃO DE LIMPEZA</div>
     <h1>Suas requisições de limpeza</h1>
     <p class="lede">Crie uma nova requisição e acompanhe o status em tempo real.</p>
   </div>
@@ -52,7 +52,7 @@
         <div class="field"><label>Data</label><input type="date" id="cleaningDate" required /></div>
         <div class="field"><label>Horário</label><input type="time" id="cleaningTime" required /></div>
       </div>
-      <div class="field"><label>Endereço</label><input type="text" id="propertyAddress" placeholder="Könizstrasse 213, Liebefeld" required /></div>
+      <div class="field"><label>Endereço</label><input type="text" id="propertyAddress" placeholder="Digite o endereço completo" required /></div>
       <div class="field-row">
         <div class="field"><label>Duração da estadia (dias)</label><input type="number" id="stayDuration" min="1" required /></div>
         <div class="field"><label>Nº de hóspedes</label><input type="number" id="guestCount" min="1" required /></div>
@@ -72,6 +72,8 @@
     </form>
   </div>
 
+  <div class="stats-grid" id="clientStatsGrid"></div>
+
   <div class="section-label">Minhas requisições</div>
   <div class="filter-bar">
     <span class="flabel">Status</span>
@@ -85,7 +87,7 @@
   <div id="clientRequests"></div>
 </div>
 
-<script src="app-common.js?v=4"></script>
+<script src="app-common.js?v=7"></script>
 <script>
 let currentUser = null;
 let currentProfile = null;
@@ -128,7 +130,7 @@ async function createCleaningRequest(event){
     client_id: currentUser.id,
     client_name: currentProfile.name,
     client_email: currentUser.email,
-    address: document.getElementById('propertyAddress').value || 'Könizstrasse 213, Liebefeld',
+    address: document.getElementById('propertyAddress').value,
     date: document.getElementById('cleaningDate').value,
     time: document.getElementById('cleaningTime').value,
     stay_duration: parseInt(document.getElementById('stayDuration').value),
@@ -164,13 +166,33 @@ async function loadClientRequests(){
   container.innerHTML = requests.map(req => renderTaskCard(req, 'client')).join('');
   container.dataset.loaded = '1';
   attachTimers(requests);
+  renderClientStats(requests, filter);
 }
 
-function editRequest(id){
-  const newDate = prompt('Nova data (YYYY-MM-DD):');
-  if (!newDate) return;
-  const newTime = prompt('Novo horário (HH:MM):');
-  if (!newTime) return;
+function renderClientStats(requests, filter){
+  const grid = document.getElementById('clientStatsGrid');
+  // quando filtrado, a lista só tem o status escolhido — busca tudo pra estatística fazer sentido
+  if (filter !== 'all') return; // mantém o último total visível em vez de mostrar números parciais
+  const pending = requests.filter(r => r.status === 'pending').length;
+  const inProgress = requests.filter(r => r.status === 'in-progress').length;
+  const completed = requests.filter(r => r.status === 'completed').length;
+  grid.innerHTML = `
+    <div class="stat"><div class="n">${requests.length}</div><div class="l">Total</div></div>
+    <div class="stat"><div class="n">${pending}</div><div class="l">Pendentes</div></div>
+    <div class="stat"><div class="n">${inProgress}</div><div class="l">Em andamento</div></div>
+    <div class="stat"><div class="n">${completed}</div><div class="l">Concluídas</div></div>
+  `;
+}
+
+function toggleEditForm(id){
+  const form = document.getElementById('editForm_' + id);
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveEditRequest(id){
+  const newDate = document.getElementById('editDate_' + id).value;
+  const newTime = document.getElementById('editTime_' + id).value;
+  if (!newDate || !newTime) return alert('Preencha data e horário.');
   sb.from('cleaning_requests').update({ date: newDate, time: newTime }).eq('id', id)
     .then(({ error }) => {
       if (error) return alert('Erro: ' + error.message);
@@ -192,6 +214,7 @@ function cancelRequest(id){
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js').catch(console.error);
 }
+if (typeof setupInstallAndNotifyBanner === 'function') setupInstallAndNotifyBanner();
 </script>
 </body>
 </html>
