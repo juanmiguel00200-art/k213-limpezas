@@ -67,13 +67,13 @@ function clearSession(){
 }
 
 /* cria conta na tabela "usuarios" */
-async function criarConta(name, username, password, role){
+async function criarConta(name, username, password, role, address){
   const password_hash = await sha256Hex(password);
   const recovery_code = generateRecoveryCode();
 
   const { data, error } = await sb.rpc('k213_criar_conta', {
     p_name: name, p_username: username, p_password_hash: password_hash,
-    p_recovery_code: recovery_code, p_role: role
+    p_recovery_code: recovery_code, p_role: role, p_address: address || null
   });
   if (error) throw new Error(error.message.includes('já existe') ? 'Esse usuário já existe. Escolha outro nome de usuário.' : error.message);
   const row = Array.isArray(data) ? data[0] : data;
