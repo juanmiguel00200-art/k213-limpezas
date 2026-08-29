@@ -6,7 +6,9 @@
 <title>K213 · Painel do Cliente</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15151A">
+<link rel="stylesheet" href="style.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -72,7 +74,7 @@
   <div id="clientRequests"></div>
 </div>
 
-<script src="app-common.js?v=3"></script>
+<script src="app-common.js?v=4"></script>
 <script>
 let currentUser = null;
 let currentProfile = null;
@@ -89,10 +91,14 @@ let currentProfile = null;
   updatePrice();
   loadClientRequests();
   startRealtime((payload) => {
-    if (payload.new && payload.new.client_id === currentUser.id) loadClientRequests();
-    else if (payload.old && payload.old.client_id === currentUser.id) loadClientRequests();
+    if (payload.new && payload.new.client_id === currentUser.id) reloadRequests();
+    else if (payload.old && payload.old.client_id === currentUser.id) reloadRequests();
   });
 })();
+
+// recarga "suave": junta ações do usuário + evento de tempo real
+// numa só atualização, sem piscar a tela duas vezes
+const reloadRequests = debounce(loadClientRequests, 300);
 
 function updatePrice(){
   const el = document.getElementById('laundryService');
@@ -129,12 +135,12 @@ async function createCleaningRequest(event){
   document.getElementById('laundryService').checked = false;
   updatePrice();
   showSnackbar('✅ Requisição criada! Valor: ' + price + ' CHF');
-  loadClientRequests();
+  reloadRequests();
 }
 
 async function loadClientRequests(){
   const container = document.getElementById('clientRequests');
-  container.innerHTML = '<div class="spinner"></div>';
+  if (!container.dataset.loaded) container.innerHTML = '<div class="spinner"></div>';
 
   const filter = document.getElementById('clientFilterStatus').value;
   let query = sb.from('cleaning_requests').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
@@ -145,6 +151,7 @@ async function loadClientRequests(){
   if (!requests.length) { container.innerHTML = '<div class="empty">Nenhuma requisição encontrada.</div>'; return; }
 
   container.innerHTML = requests.map(req => renderTaskCard(req, 'client')).join('');
+  container.dataset.loaded = '1';
   attachTimers(requests);
 }
 
@@ -157,7 +164,7 @@ function editRequest(id){
     .then(({ error }) => {
       if (error) return alert('Erro: ' + error.message);
       showSnackbar('✅ Requisição atualizada!');
-      loadClientRequests();
+      reloadRequests();
     });
 }
 
@@ -166,8 +173,13 @@ function cancelRequest(id){
   sb.from('cleaning_requests').delete().eq('id', id).then(({ error }) => {
     if (error) return alert('Erro: ' + error.message);
     showSnackbar('🗑️ Requisição cancelada.');
-    loadClientRequests();
+    reloadRequests();
   });
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js').catch(console.error);
 }
 </script>
 </body>
