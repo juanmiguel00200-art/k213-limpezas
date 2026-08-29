@@ -6,7 +6,7 @@
 <title>K213 · Painel do Profissional</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -60,7 +60,7 @@
   <div id="cleanerTasks"></div>
 </div>
 
-<script src="app-common.js?v=2"></script>
+<script src="app-common.js?v=3"></script>
 <script>
 let currentUser = null;
 let currentProfile = null;
@@ -89,7 +89,7 @@ async function loadCleanerTasks(){
   const filterStatus = document.getElementById('cleanerFilterStatus').value;
   const filterDate = document.getElementById('cleanerFilterDate').value;
 
-  let query = supabase.from('cleaning_requests').select('*').order('created_at', { ascending: false });
+  let query = sb.from('cleaning_requests').select('*').order('created_at', { ascending: false });
   if (filterStatus !== 'all') query = query.eq('status', filterStatus);
   if (filterDate) query = query.eq('date', filterDate);
 
@@ -105,7 +105,7 @@ async function loadCleanerTasks(){
 // CRONÔMETRO — botão automático de contagem das horas
 // ------------------------------------------------------------
 async function startTimer(id){
-  const { error } = await supabase.from('cleaning_requests')
+  const { error } = await sb.from('cleaning_requests')
     .update({ status: 'in-progress', work_start: new Date().toISOString() })
     .eq('id', id);
   if (error) return alert('Erro: ' + error.message);
@@ -114,7 +114,7 @@ async function startTimer(id){
 }
 
 async function stopTimer(id){
-  const { error } = await supabase.from('cleaning_requests')
+  const { error } = await sb.from('cleaning_requests')
     .update({ work_end: new Date().toISOString() })
     .eq('id', id);
   if (error) return alert('Erro: ' + error.message);
@@ -126,22 +126,22 @@ async function stopTimer(id){
 // CHECKLIST DA TAREFA — marcar/desmarcar itens
 // ------------------------------------------------------------
 async function toggleChecklistItem(id, itemId){
-  const { data: row, error: fetchErr } = await supabase.from('cleaning_requests').select('checklist').eq('id', id).single();
+  const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('checklist').eq('id', id).single();
   if (fetchErr) return alert('Erro: ' + fetchErr.message);
   const checklist = (row.checklist || []).map(item => item.id === itemId ? { ...item, done: !item.done } : item);
-  const { error } = await supabase.from('cleaning_requests').update({ checklist }).eq('id', id);
+  const { error } = await sb.from('cleaning_requests').update({ checklist }).eq('id', id);
   if (error) return alert('Erro: ' + error.message);
   loadCleanerTasks();
 }
 
 async function completeTask(id){
-  const { data: row, error: fetchErr } = await supabase.from('cleaning_requests').select('*').eq('id', id).single();
+  const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('*').eq('id', id).single();
   if (fetchErr) return alert('Erro: ' + fetchErr.message);
   const allDone = row.checklist ? row.checklist.every(i => i.done) : true;
   if (!allDone && !confirm('Algumas tarefas do checklist não foram concluídas. Continuar?')) return;
   if (!row.work_start || !row.work_end) return alert('Use o cronômetro (Iniciar/Finalizar trabalho) antes de concluir.');
 
-  const { error } = await supabase.from('cleaning_requests').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
+  const { error } = await sb.from('cleaning_requests').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', id);
   if (error) return alert('Erro: ' + error.message);
   showSnackbar('✅ Tarefa concluída!');
   loadCleanerTasks();
@@ -158,15 +158,15 @@ async function uploadPhotos(id, input){
     const urls = [];
     for (const file of files) {
       const path = `${id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_')}`;
-      const { error: upErr } = await supabase.storage.from('cleaning-photos').upload(path, file);
+      const { error: upErr } = await sb.storage.from('cleaning-photos').upload(path, file);
       if (upErr) throw upErr;
-      const { data } = supabase.storage.from('cleaning-photos').getPublicUrl(path);
+      const { data } = sb.storage.from('cleaning-photos').getPublicUrl(path);
       urls.push(data.publicUrl);
     }
-    const { data: row, error: fetchErr } = await supabase.from('cleaning_requests').select('photos').eq('id', id).single();
+    const { data: row, error: fetchErr } = await sb.from('cleaning_requests').select('photos').eq('id', id).single();
     if (fetchErr) throw fetchErr;
     const allPhotos = [...(row.photos || []), ...urls];
-    const { error: updErr } = await supabase.from('cleaning_requests').update({ photos: allPhotos }).eq('id', id);
+    const { error: updErr } = await sb.from('cleaning_requests').update({ photos: allPhotos }).eq('id', id);
     if (updErr) throw updErr;
     showSnackbar('📸 Fotos enviadas!');
     loadCleanerTasks();
@@ -194,21 +194,21 @@ async function loadChecklistEditor(){
 async function addChecklistItem(){
   const items = await getDefaultChecklist();
   items.push({ id: 'item_' + Date.now(), label: 'Nova tarefa' });
-  const { error } = await supabase.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
+  const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
   if (error) return alert('Erro: ' + error.message);
   loadChecklistEditor();
 }
 
 async function removeChecklistItem(itemId){
   const items = (await getDefaultChecklist()).filter(i => i.id !== itemId);
-  const { error } = await supabase.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
+  const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
   if (error) return alert('Erro: ' + error.message);
   loadChecklistEditor();
 }
 
 async function updateChecklistItemLabel(itemId, newLabel){
   const items = (await getDefaultChecklist()).map(i => i.id === itemId ? { ...i, label: newLabel } : i);
-  const { error } = await supabase.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
+  const { error } = await sb.from('default_checklist').update({ items, updated_at: new Date().toISOString() }).eq('id', 1);
   if (error) return alert('Erro: ' + error.message);
 }
 </script>
