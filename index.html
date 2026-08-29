@@ -6,7 +6,9 @@
 <title>K213 · Entrar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#15151A">
+<link rel="stylesheet" href="style.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -82,7 +84,7 @@
   </div>
 </div>
 
-<script src="app-common.js?v=3"></script>
+<script src="app-common.js?v=4"></script>
 <script>
 if (!K213_CONFIGURED) renderSetupWarning();
 
@@ -161,6 +163,11 @@ document.getElementById('recoverForm').addEventListener('submit', async (e) => {
   }
   btn.disabled = false; btn.textContent = 'Redefinir senha';
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js').catch(console.error);
+}
 </script>
 </body>
 </html>
