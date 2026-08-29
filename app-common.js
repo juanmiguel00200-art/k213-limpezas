@@ -2,10 +2,16 @@
    K213 — núcleo compartilhado (config, auth, utilitários)
    Carregado por todas as páginas via <script src="app-common.js">
 
-   ATUALIZAÇÃO: login por USUÁRIO+SENHA própria (tabela "usuarios"),
-   sem depender de confirmação de email. Recuperação de senha por
-   CÓDIGO gerado na criação da conta (guarde-o, não tem outro jeito
-   de recuperar).
+   Login por USUÁRIO+SENHA própria (tabela "usuarios"), sem
+   depender de confirmação de email. Recuperação de senha por
+   CÓDIGO gerado na criação da conta (guarde-o, não tem outro
+   jeito de recuperar).
+
+   IMPORTANTE: o cliente do Supabase é guardado na variável "sb"
+   (não "supabase") porque a própria biblioteca carregada pelo
+   <script src=".../supabase-js@2"> já cria uma global chamada
+   "supabase" — usar o mesmo nome de novo quebra a página inteira
+   com "Identifier 'supabase' has already been declared".
    ============================================================ */
 
 /* ---------- CONFIGURAÇÃO SUPABASE — edite aqui ---------- */
@@ -15,8 +21,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
 
-const K213_CONFIGURED = !(SUPABASE_URL.includes('https://oyxmrrazgjdnyzhyinhc.supabase.co';) || SUPABASE_ANON_KEY.includes('sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';));
-const supabase = K213_CONFIGURED ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const K213_CONFIGURED = true;
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let realtimeChannel = null;
 
@@ -62,13 +68,13 @@ function clearSession(){
 
 /* cria conta na tabela "usuarios" */
 async function criarConta(name, username, password, role){
-  const { data: existing } = await supabase.from('usuarios').select('id').eq('username', username).maybeSingle();
+  const { data: existing } = await sb.from('usuarios').select('id').eq('username', username).maybeSingle();
   if (existing) throw new Error('Esse usuário já existe. Escolha outro nome de usuário.');
 
   const password_hash = await sha256Hex(password);
   const recovery_code = generateRecoveryCode();
 
-  const { data, error } = await supabase.from('usuarios')
+  const { data, error } = await sb.from('usuarios')
     .insert({ name, username, password_hash, recovery_code, role })
     .select().single();
   if (error) throw error;
@@ -79,7 +85,7 @@ async function criarConta(name, username, password, role){
 /* login por usuário + senha */
 async function entrarComSenha(username, password){
   const password_hash = await sha256Hex(password);
-  const { data, error } = await supabase.from('usuarios')
+  const { data, error } = await sb.from('usuarios')
     .select('*').eq('username', username).eq('password_hash', password_hash).maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('Usuário ou senha incorretos.');
@@ -88,14 +94,14 @@ async function entrarComSenha(username, password){
 
 /* redefine a senha usando o código de recuperação, e gera um código novo */
 async function redefinirSenha(username, recoveryCode, newPassword){
-  const { data, error } = await supabase.from('usuarios')
+  const { data, error } = await sb.from('usuarios')
     .select('*').eq('username', username).eq('recovery_code', recoveryCode.toUpperCase()).maybeSingle();
   if (error) throw error;
   if (!data) throw new Error('Usuário ou código de recuperação incorretos.');
 
   const newHash = await sha256Hex(newPassword);
   const newCode = generateRecoveryCode();
-  const { error: updErr } = await supabase.from('usuarios')
+  const { error: updErr } = await sb.from('usuarios')
     .update({ password_hash: newHash, recovery_code: newCode }).eq('id', data.id);
   if (updErr) throw updErr;
 
@@ -127,7 +133,7 @@ function paintWho(profile){
 }
 
 function logout(){
-  if (realtimeChannel && supabase) { supabase.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (realtimeChannel && sb) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
   clearSession();
   window.location.href = 'index.html';
 }
@@ -136,8 +142,8 @@ function logout(){
    onChange(payload) é chamado a cada INSERT/UPDATE/DELETE em
    cleaning_requests. Cada página decide o que recarregar. */
 function startRealtime(onChange){
-  if (realtimeChannel || !supabase) return;
-  realtimeChannel = supabase
+  if (realtimeChannel || !sb) return;
+  realtimeChannel = sb
     .channel('cleaning_requests_sync')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'cleaning_requests' }, onChange)
     .subscribe();
@@ -181,7 +187,7 @@ function escapeHtml(str){
 
 /* ---------- checklist padrão ---------- */
 async function getDefaultChecklist(){
-  const { data, error } = await supabase.from('default_checklist').select('items').eq('id', 1).single();
+  const { data, error } = await sb.from('default_checklist').select('items').eq('id', 1).single();
   if (error || !data) return [];
   return data.items;
 }
