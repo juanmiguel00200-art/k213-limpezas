@@ -1,0 +1,15 @@
+{
+  "name": "K213 — Coordenação de Limpezas",
+  "short_name": "K213",
+  "description": "Könizstrasse 213, Liebefeld — coordenação de limpezas entre cliente e profissional.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F1EDE1",
+  "theme_color": "#15151A",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
