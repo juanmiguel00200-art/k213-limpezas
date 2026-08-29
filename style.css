@@ -1,5 +1,5 @@
 /* ============================================================
-   K213 — sistema de design compartilhado
+   CleanSync — sistema de design compartilhado
    Conceito: cada limpeza é um TICKET — talão de check-in /
    etiqueta de chave de hotel. Cantos cortados como bilhete,
    referência tratada como número de talão, status como carimbo.
@@ -235,13 +235,46 @@ form .field.price-field .price-box{ background:var(--brass-bg); border:1px solid
 
 .checklist{ margin:16px 0; padding:16px; background:var(--surface-2); border:1px solid var(--border); }
 .checklist h4{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:10px; font-weight:700; }
-.checklist-item{ display:flex; align-items:center; gap:10px; padding:8px 6px; border-bottom:1px solid var(--border); }
+.checklist-item{
+  display:flex; align-items:center; gap:12px; padding:10px 6px; border-bottom:1px solid var(--border);
+  transition: transform .28s cubic-bezier(.3,.8,.4,1), opacity .28s ease;
+}
 .checklist-item:last-child{ border-bottom:none; }
-.checklist-item input[type=checkbox]{ width:19px; height:19px; accent-color:var(--success); cursor:pointer; flex-shrink:0; }
-.checklist-item label{ font-size:13.5px; cursor:pointer; }
-.checklist-item.done label{ text-decoration:line-through; color:var(--muted); }
+
+/* círculo de seleção estilo "Lembretes" do iPhone, com check animado */
+.checklist-item input[type=checkbox]{
+  appearance:none; -webkit-appearance:none; margin:0; flex-shrink:0;
+  width:24px; height:24px; border-radius:50%;
+  border:2px solid var(--border-strong); background:#fff; position:relative;
+  cursor:pointer; transition: background .18s ease, border-color .18s ease, transform .12s ease, box-shadow .2s ease;
+}
+.checklist-item input[type=checkbox]:hover{ border-color:var(--success); }
+.checklist-item input[type=checkbox]:active{ transform:scale(.86); }
+.checklist-item input[type=checkbox]:checked{
+  background:var(--success); border-color:var(--success);
+  box-shadow:0 0 0 4px var(--success-bg);
+}
+.checklist-item input[type=checkbox]:checked::after{
+  content:''; position:absolute; left:7px; top:3px;
+  width:6px; height:11px; border:solid #fff; border-width:0 2.5px 2.5px 0;
+  transform:rotate(45deg); animation:checkPop .24s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes checkPop{ from{ transform:rotate(45deg) scale(0); opacity:0;} to{ transform:rotate(45deg) scale(1); opacity:1;} }
+
+.checklist-item label{ font-size:13.5px; cursor:pointer; transition: color .25s ease, opacity .25s ease; }
+.checklist-item.done label{ color:var(--muted); opacity:.6; }
 .checklist-item.laundry-item{ background:var(--warning-bg); padding:8px 10px; border-radius:2px; border-bottom:none; }
 .checklist-item .plus{ margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--warning); font-weight:800; }
+
+/* animação de "concluir e mandar pra baixo", tipo Lembretes do iPhone */
+.checklist-item.completing{
+  animation: completeSwipe .32s cubic-bezier(.3,.8,.4,1) forwards;
+}
+@keyframes completeSwipe{
+  0%{ transform:translateY(0) scale(1); opacity:1; }
+  45%{ transform:translateY(10px) scale(.97); opacity:.45; }
+  100%{ transform:translateY(0) scale(1); opacity:1; }
+}
 .checklist-progress{ font-family:var(--mono); font-size:11px; color:var(--muted); margin-bottom:10px; font-weight:700; letter-spacing:.03em; }
 
 .photo-row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
@@ -274,6 +307,19 @@ form .field.price-field .price-box{ background:var(--brass-bg); border:1px solid
 @keyframes spin{ to{ transform:rotate(360deg); } }
 
 .page-loading{ min-height:100vh; display:flex; align-items:center; justify-content:center; }
+
+/* seções recolhíveis (ex: configurar checklist padrão) */
+details.card summary{ outline:none; }
+details.card summary::-webkit-details-marker{ display:none; }
+details.card summary::marker{ content:''; }
+details.card summary::after{ content:'▸'; color:var(--accent); font-weight:800; margin-left:8px; transition:transform .15s ease; }
+details.card[open] summary::after{ transform:rotate(90deg); }
+details.card summary span:last-child{ font-family:var(--mono); text-transform:none; letter-spacing:0; font-weight:400; }
+
+/* formulário de edição inline dentro do card de tarefa */
+.task-edit-form{ margin-top:16px; padding-top:16px; border-top:1px dashed var(--border-strong); }
+.task-edit-form .field-row{ margin-bottom:12px; }
+.task-edit-form .edit-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:4px; }
 
 @media (prefers-reduced-motion: reduce){
   *{ animation:none !important; transition:none !important; }
