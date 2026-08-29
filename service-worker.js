@@ -40,21 +40,8 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-/* ---------- notificações push ----------
-   Recebe uma notificação enviada pelo servidor (ex: OneSignal)
-   e exibe pro usuário, mesmo com o site fechado. */
-self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : {};
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'K213', {
-      body: data.body || 'Nova atualização na sua limpeza.',
-      icon: 'icon-192.png',
-      badge: 'icon-192.png'
-    })
-  );
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  event.waitUntil(clients.openWindow('./index.html'));
-});
+/* As notificações push agora são tratadas pelo service worker próprio da
+   OneSignal, registrado à parte em /onesignal/OneSignalSDKWorker.js com
+   escopo restrito a essa subpasta — por isso não há mais um listener de
+   'push' aqui. Manter os dois workers com escopos diferentes evita conflito
+   entre o cache deste worker e o registro de push da OneSignal. */
