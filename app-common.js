@@ -15,6 +15,7 @@
    conversations
    messages
    default_checklist
+   profiles
 
    Conversations:
    id
@@ -31,18 +32,10 @@
    content
    created_at
 
-   RELAÇÃO DO CHAT:
-
-   cleaning_requests.id
-          ↓
-   conversations.task_id
-          ↓
-   messages.conversation_id
-
    IMPORTANTE:
-   NÃO utiliza:
-   cleaning_id
-   cleaning_request_id
+   - O relacionamento do chat usa conversations.task_id
+   - NÃO usa cleaning_id
+   - NÃO usa cleaning_request_id
 ============================================================ */
 
 
@@ -73,7 +66,10 @@ let sb = null;
 
 try {
 
-  if (window.supabase) {
+  if (
+    window.supabase &&
+    typeof window.supabase.createClient === 'function'
+  ) {
 
     sb = window.supabase.createClient(
       SUPABASE_URL,
@@ -120,10 +116,6 @@ window.CleanSync.supabase =
    HELPERS
 ============================================================ */
 
-
-/**
- * Debounce
- */
 function debounce(
   fn,
   delay = 300
@@ -145,9 +137,6 @@ function debounce(
 }
 
 
-/**
- * Escape HTML
- */
 function escapeHtml(value) {
 
   if (
@@ -160,33 +149,15 @@ function escapeHtml(value) {
   }
 
   return String(value)
-    .replace(
-      /&/g,
-      '&amp;'
-    )
-    .replace(
-      /</g,
-      '&lt;'
-    )
-    .replace(
-      />/g,
-      '&gt;'
-    )
-    .replace(
-      /"/g,
-      '&quot;'
-    )
-    .replace(
-      /'/g,
-      '&#039;'
-    );
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 
 }
 
 
-/**
- * Escape para atributo HTML
- */
 function escapeAttr(value) {
 
   return escapeHtml(value);
@@ -194,9 +165,6 @@ function escapeAttr(value) {
 }
 
 
-/**
- * Formatação de data
- */
 function formatDate(value) {
 
   if (!value) {
@@ -205,16 +173,15 @@ function formatDate(value) {
 
   }
 
+  const raw =
+    String(value);
 
   const date =
     new Date(
-      value + (
-        String(value).length === 10
-          ? 'T00:00:00'
-          : ''
-      )
+      raw.length === 10
+        ? raw + 'T00:00:00'
+        : raw
     );
-
 
   if (
     Number.isNaN(
@@ -222,10 +189,11 @@ function formatDate(value) {
     )
   ) {
 
-    return escapeHtml(value);
+    return escapeHtml(
+      raw
+    );
 
   }
-
 
   return date.toLocaleDateString(
     'pt-BR'
@@ -234,9 +202,6 @@ function formatDate(value) {
 }
 
 
-/**
- * Formatação de hora
- */
 function formatTime(value) {
 
   if (!value) {
@@ -245,21 +210,16 @@ function formatTime(value) {
 
   }
 
-
   return String(value)
     .slice(0, 5);
 
 }
 
 
-/**
- * Formatação CHF
- */
 function formatCHF(value) {
 
   const number =
     Number(value || 0);
-
 
   return number.toLocaleString(
     'pt-BR',
@@ -289,7 +249,6 @@ function showSnackbar(
       'snackbar'
     );
 
-
   if (!snackbar) {
 
     console.log(
@@ -300,20 +259,16 @@ function showSnackbar(
 
   }
 
-
   snackbar.textContent =
     message;
-
 
   snackbar.classList.add(
     'show'
   );
 
-
   clearTimeout(
     snackbarTimer
   );
-
 
   snackbarTimer =
     setTimeout(
@@ -343,7 +298,6 @@ function getSession() {
         'cleansync_session'
       );
 
-
     if (raw) {
 
       return JSON.parse(
@@ -361,7 +315,6 @@ function getSession() {
     );
 
   }
-
 
   return {};
 
@@ -404,6 +357,7 @@ function clearSession() {
   catch (error) {
 
     console.warn(
+      'Erro ao limpar sessão:',
       error
     );
 
@@ -426,7 +380,6 @@ async function getCurrentProfile(
 
   }
 
-
   const {
     data,
     error
@@ -439,7 +392,6 @@ async function getCurrentProfile(
     )
     .maybeSingle();
 
-
   if (error) {
 
     console.error(
@@ -451,15 +403,11 @@ async function getCurrentProfile(
 
   }
 
-
   return data || null;
 
 }
 
 
-/**
- * Nome seguro do perfil
- */
 function getProfileName(
   profile,
   user
@@ -477,7 +425,6 @@ function getProfileName(
 
   }
 
-
   return (
     user?.email ||
     ''
@@ -487,7 +434,7 @@ function getProfileName(
 
 
 /* ============================================================
-   AUTENTICAÇÃO / REQUIRE ROLE
+   AUTENTICAÇÃO
 ============================================================ */
 
 async function requireRole(
@@ -504,12 +451,10 @@ async function requireRole(
 
   }
 
-
   const {
     data,
     error
   } = await sb.auth.getSession();
-
 
   if (
     error ||
@@ -524,16 +469,13 @@ async function requireRole(
 
   }
 
-
   const user =
     data.session.user;
-
 
   const profile =
     await getCurrentProfile(
       user.id
     );
-
 
   if (!profile) {
 
@@ -541,36 +483,28 @@ async function requireRole(
       'Perfil não encontrado.'
     );
 
-
     showSnackbar(
       'Perfil do usuário não encontrado.'
     );
 
-
     await sb.auth.signOut();
-
 
     window.location.href =
       'index.html';
-
 
     return null;
 
   }
 
-
   const role =
     profile.role;
 
-
   let authorized = true;
-
 
   if (requiredRole) {
 
     if (
-      requiredRole ===
-      'profissional'
+      requiredRole === 'profissional'
     ) {
 
       authorized =
@@ -578,17 +512,22 @@ async function requireRole(
         role === 'admin';
 
     }
-
     else if (
-      requiredRole ===
-      'cliente'
+      requiredRole === 'cliente'
     ) {
 
       authorized =
         role === 'cliente';
 
     }
+    else if (
+      requiredRole === 'admin'
+    ) {
 
+      authorized =
+        role === 'admin';
+
+    }
     else {
 
       authorized =
@@ -597,7 +536,6 @@ async function requireRole(
     }
 
   }
-
 
   if (!authorized) {
 
@@ -609,17 +547,39 @@ async function requireRole(
         'cliente.html';
 
     }
-
     else if (
-      role === 'profissional' ||
-      role === 'admin'
+      role === 'profissional'
     ) {
 
       window.location.href =
         'profissional.html';
 
     }
+    else if (
+      role === 'admin'
+    ) {
 
+      /*
+       * Admin pode acessar páginas
+       * administrativas/profissionais.
+       */
+
+      if (
+        requiredRole === 'cliente'
+      ) {
+
+        window.location.href =
+          'profissional.html';
+
+      }
+      else {
+
+        window.location.href =
+          'admin.html';
+
+      }
+
+    }
     else {
 
       window.location.href =
@@ -627,11 +587,9 @@ async function requireRole(
 
     }
 
-
     return null;
 
   }
-
 
   saveSession({
 
@@ -656,12 +614,10 @@ async function requireRole(
 
   });
 
-
   const topName =
     document.getElementById(
       'topWhoName'
     );
-
 
   if (topName) {
 
@@ -675,12 +631,10 @@ async function requireRole(
 
   }
 
-
   const adminLink =
     document.getElementById(
       'navAdminLink'
     );
-
 
   if (adminLink) {
 
@@ -691,13 +645,57 @@ async function requireRole(
 
   }
 
-
   return {
 
     user,
     profile
 
   };
+
+}
+
+
+/* ============================================================
+   USUÁRIO ATUAL
+============================================================ */
+
+async function getCurrentUser() {
+
+  if (!sb) {
+
+    return null;
+
+  }
+
+  try {
+
+    const {
+      data,
+      error
+    } = await sb.auth.getUser();
+
+    if (
+      error ||
+      !data?.user
+    ) {
+
+      return null;
+
+    }
+
+    return data.user;
+
+  }
+  catch (error) {
+
+    console.warn(
+      'Erro ao obter usuário:',
+      error
+    );
+
+    return null;
+
+  }
 
 }
 
@@ -726,9 +724,7 @@ async function logout() {
 
   }
 
-
   clearSession();
-
 
   window.location.href =
     'index.html';
@@ -797,7 +793,6 @@ async function getDefaultChecklist() {
 
   }
 
-
   try {
 
     const {
@@ -811,7 +806,6 @@ async function getDefaultChecklist() {
         1
       )
       .maybeSingle();
-
 
     if (
       !error &&
@@ -834,7 +828,6 @@ async function getDefaultChecklist() {
     );
 
   }
-
 
   return FALLBACK_CHECKLIST.map(
     item => ({
@@ -869,7 +862,6 @@ function getStatusLabel(
 
   };
 
-
   return (
     labels[status] ||
     status ||
@@ -891,7 +883,6 @@ function getStatusClass(
 
   }
 
-
   if (
     status === 'in-progress'
   ) {
@@ -900,7 +891,6 @@ function getStatusClass(
 
   }
 
-
   if (
     status === 'cancelled'
   ) {
@@ -908,7 +898,6 @@ function getStatusClass(
     return 'cancelled';
 
   }
-
 
   return 'pending';
 
@@ -933,22 +922,21 @@ function normalizeChecklist(
 
   }
 
-
   return checklist.map(
     (item, index) => ({
 
       id:
-        item.id ||
+        item?.id ||
         `item_${index}`,
 
       label:
-        item.label ||
-        item.name ||
+        item?.label ||
+        item?.name ||
         `Tarefa ${index + 1}`,
 
       done:
         Boolean(
-          item.done
+          item?.done
         )
 
     })
@@ -966,16 +954,13 @@ function getChecklistProgress(
       checklist
     );
 
-
   const total =
     items.length;
-
 
   const done =
     items.filter(
       item => item.done
     ).length;
-
 
   return {
 
@@ -1003,48 +988,47 @@ function renderTaskCard(
   mode = 'client'
 ) {
 
+  if (!task) {
+
+    return '';
+
+  }
+
   const status =
     task.status ||
     'pending';
-
 
   const statusLabel =
     getStatusLabel(
       status
     );
 
-
   const statusClass =
     getStatusClass(
       status
     );
-
 
   const checklist =
     normalizeChecklist(
       task.checklist
     );
 
-
   const progress =
     getChecklistProgress(
       checklist
     );
 
-
   const isAdmin =
     mode === 'admin';
 
-
   const isCleaner =
     mode === 'cleaner' ||
+    mode === 'professional' ||
     mode === 'profissional';
-
 
   const isClient =
     mode === 'client' ||
     mode === 'cliente';
-
 
   const photos =
     Array.isArray(
@@ -1053,21 +1037,17 @@ function renderTaskCard(
       ? task.photos
       : [];
 
-
   const refCode =
     task.ref_code ||
     'LIMPEZA';
-
 
   const clientName =
     task.client_name ||
     'Cliente';
 
-
   const professionalName =
     task.professional_name ||
     '';
-
 
   const price =
     task.price !== null &&
@@ -1079,8 +1059,7 @@ function renderTaskCard(
             : PRICE_BASE
         );
 
-
-  let html = `
+  return `
 
     <div
       class="task card"
@@ -1104,9 +1083,8 @@ function renderTaskCard(
 
         </div>
 
-
         <span
-          class="status status-${statusClass}"
+          class="status status-${escapeAttr(statusClass)}"
         >
           ${escapeHtml(statusLabel)}
         </span>
@@ -1246,8 +1224,11 @@ function renderTaskCard(
                   return `
 
                     <label
-                      class="checklist-item
-                      ${item.done ? 'done' : ''}"
+                      class="checklist-item ${
+                        item.done
+                          ? 'done'
+                          : ''
+                      }"
                     >
 
                       ${
@@ -1264,8 +1245,12 @@ function renderTaskCard(
                               ${checked}
                               onchange="
                                 toggleChecklistItem(
-                                  '${escapeAttr(task.id)}',
-                                  '${escapeAttr(item.id)}'
+                                  '${escapeAttr(
+                                    task.id
+                                  )}',
+                                  '${escapeAttr(
+                                    item.id
+                                  )}'
                                 )
                               "
                             >
@@ -1340,9 +1325,11 @@ function renderTaskCard(
                   )}"
                   ${
                     task.work_end
-                      ? `data-end="${escapeAttr(
+                      ? `
+                        data-end="${escapeAttr(
                           task.work_end
-                        )}"`
+                        )}"
+                      `
                       : ''
                   }
                 >
@@ -1372,13 +1359,17 @@ function renderTaskCard(
                   photo => `
 
                     <a
-                      href="${escapeAttr(photo)}"
+                      href="${escapeAttr(
+                        photo
+                      )}"
                       target="_blank"
-                      rel="noopener"
+                      rel="noopener noreferrer"
                     >
 
                       <img
-                        src="${escapeAttr(photo)}"
+                        src="${escapeAttr(
+                          photo
+                        )}"
                         alt="Foto da limpeza"
                         loading="lazy"
                       >
@@ -1400,17 +1391,14 @@ function renderTaskCard(
 
         <!-- ==================================================
              CHAT
-             Disponível para:
-             cliente
-             profissional
-             admin
-        =================================================== -->
+        ================================================== -->
 
         <button
-          class="btn btn-outline chat-task-button"
+          class="btn btn-outline"
           type="button"
-          data-chat-task-id="${escapeAttr(task.id)}"
-          onclick="openChat('${escapeAttr(task.id)}')"
+          onclick="openChat('${escapeAttr(
+            task.id
+          )}')"
         >
           💬 Chat
         </button>
@@ -1427,7 +1415,9 @@ function renderTaskCard(
                     <button
                       class="btn btn-accent"
                       type="button"
-                      onclick="startTimer('${escapeAttr(task.id)}')"
+                      onclick="startTimer('${escapeAttr(
+                        task.id
+                      )}')"
                     >
                       ▶️ Iniciar trabalho
                     </button>
@@ -1443,7 +1433,9 @@ function renderTaskCard(
                     <button
                       class="btn btn-outline"
                       type="button"
-                      onclick="stopTimer('${escapeAttr(task.id)}')"
+                      onclick="stopTimer('${escapeAttr(
+                        task.id
+                      )}')"
                     >
                       ⏹️ Finalizar trabalho
                     </button>
@@ -1459,7 +1451,9 @@ function renderTaskCard(
                     <button
                       class="btn btn-accent"
                       type="button"
-                      onclick="completeTask('${escapeAttr(task.id)}')"
+                      onclick="completeTask('${escapeAttr(
+                        task.id
+                      )}')"
                     >
                       ✅ Concluir tarefa
                     </button>
@@ -1483,7 +1477,9 @@ function renderTaskCard(
                         hidden
                         onchange="
                           uploadPhotos(
-                            '${escapeAttr(task.id)}',
+                            '${escapeAttr(
+                              task.id
+                            )}',
                             this
                           )
                         "
@@ -1502,13 +1498,17 @@ function renderTaskCard(
         ${
           isClient
             ? `
+
               ${
                 status === 'pending'
                   ? `
+
                     <button
                       class="btn btn-outline"
                       type="button"
-                      onclick="toggleEditForm('${escapeAttr(task.id)}')"
+                      onclick="toggleEditForm('${escapeAttr(
+                        task.id
+                      )}')"
                     >
                       ✏️ Editar
                     </button>
@@ -1516,13 +1516,17 @@ function renderTaskCard(
                     <button
                       class="btn btn-danger"
                       type="button"
-                      onclick="cancelRequest('${escapeAttr(task.id)}')"
+                      onclick="cancelRequest('${escapeAttr(
+                        task.id
+                      )}')"
                     >
                       🗑️ Cancelar
                     </button>
+
                   `
                   : ''
               }
+
             `
             : ''
         }
@@ -1531,13 +1535,17 @@ function renderTaskCard(
         ${
           isAdmin
             ? `
+
               <button
                 class="btn btn-danger"
                 type="button"
-                onclick="adminDeleteTask('${escapeAttr(task.id)}')"
+                onclick="adminDeleteTask('${escapeAttr(
+                  task.id
+                )}')"
               >
                 🗑️ Excluir
               </button>
+
             `
             : ''
         }
@@ -1549,9 +1557,12 @@ function renderTaskCard(
         isClient &&
         status === 'pending'
           ? `
+
             <div
               class="edit-form"
-              id="editForm_${escapeAttr(task.id)}"
+              id="editForm_${escapeAttr(
+                task.id
+              )}"
               style="display:none;"
             >
 
@@ -1565,7 +1576,9 @@ function renderTaskCard(
 
                   <input
                     type="date"
-                    id="editDate_${escapeAttr(task.id)}"
+                    id="editDate_${escapeAttr(
+                      task.id
+                    )}"
                     value="${escapeAttr(
                       task.date || ''
                     )}"
@@ -1582,7 +1595,9 @@ function renderTaskCard(
 
                   <input
                     type="time"
-                    id="editTime_${escapeAttr(task.id)}"
+                    id="editTime_${escapeAttr(
+                      task.id
+                    )}"
                     value="${escapeAttr(
                       task.time || ''
                     )}"
@@ -1596,12 +1611,15 @@ function renderTaskCard(
               <button
                 class="btn btn-accent"
                 type="button"
-                onclick="saveEditRequest('${escapeAttr(task.id)}')"
+                onclick="saveEditRequest('${escapeAttr(
+                  task.id
+                )}')"
               >
                 💾 Salvar alterações
               </button>
 
             </div>
+
           `
           : ''
       }
@@ -1610,357 +1628,38 @@ function renderTaskCard(
 
   `;
 
-
-  return html;
-
 }
 
 
 /* ============================================================
-   CHAT — UTILITÁRIOS
+   CHAT — NÚCLEO
 ============================================================ */
 
+/*
+   IMPORTANTE:
 
-/**
- * Obtém o usuário autenticado.
- */
-async function getAuthenticatedUser() {
+   A conversa é encontrada por:
 
-  if (!sb) {
+       conversations.task_id
 
-    return null;
+   Nunca por:
 
-  }
+       cleaning_id
+       cleaning_request_id
+*/
 
 
-  try {
+let activeChatConversation = null;
 
-    const {
-      data,
-      error
-    } = await sb.auth.getSession();
+let chatRealtimeChannel = null;
 
+let chatMessagesCallback = null;
 
-    if (
-      error ||
-      !data?.session?.user
-    ) {
 
-      return null;
+/* ============================================================
+   ABRIR CHAT
+============================================================ */
 
-    }
-
-
-    return data.session.user;
-
-  }
-  catch (error) {
-
-    console.error(
-      'Erro ao obter usuário autenticado:',
-      error
-    );
-
-    return null;
-
-  }
-
-}
-
-
-/**
- * Obtém a conversa vinculada à tarefa.
- *
- * RELAÇÃO CORRETA:
- *
- * conversations.task_id
- * =
- * cleaning_requests.id
- */
-async function getConversationByTask(
-  taskId
-) {
-
-  if (!sb || !taskId) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Task ID não informado.'
-      )
-    };
-
-  }
-
-
-  const {
-    data,
-    error
-  } = await sb
-    .from('conversations')
-    .select('*')
-    .eq(
-      'task_id',
-      taskId
-    )
-    .maybeSingle();
-
-
-  if (error) {
-
-    console.error(
-      'Erro ao buscar conversa:',
-      error
-    );
-
-  }
-
-
-  return {
-    data: data || null,
-    error
-  };
-
-}
-
-
-/**
- * Obtém ou cria a conversa de uma tarefa.
- *
- * O profissional e o cliente são
- * obtidos da própria cleaning_requests.
- */
-async function getOrCreateConversation(
-  taskId
-) {
-
-  if (!sb || !taskId) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Tarefa não informada.'
-      )
-    };
-
-  }
-
-
-  /*
-   * Usuário autenticado
-   */
-
-  const user =
-    await getAuthenticatedUser();
-
-
-  if (!user) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Usuário não autenticado.'
-      )
-    };
-
-  }
-
-
-  /*
-   * Primeiro tenta encontrar
-   * uma conversa existente.
-   */
-
-  const existing =
-    await getConversationByTask(
-      taskId
-    );
-
-
-  if (existing.error) {
-
-    return existing;
-
-  }
-
-
-  if (existing.data) {
-
-    return existing;
-
-  }
-
-
-  /*
-   * Busca os participantes na tarefa.
-   */
-
-  const {
-    data: task,
-    error: taskError
-  } = await sb
-    .from('cleaning_requests')
-    .select(
-      'id, client_id, professional_id'
-    )
-    .eq(
-      'id',
-      taskId
-    )
-    .maybeSingle();
-
-
-  if (taskError) {
-
-    console.error(
-      'Erro ao buscar tarefa para chat:',
-      taskError
-    );
-
-    return {
-      data: null,
-      error: taskError
-    };
-
-  }
-
-
-  if (!task) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Tarefa não encontrada.'
-      )
-    };
-
-  }
-
-
-  /*
-   * Verifica se o usuário faz
-   * parte da conversa.
-   *
-   * Admin também pode acessar.
-   */
-
-  const profile =
-    await getCurrentProfile(
-      user.id
-    );
-
-
-  const isAdmin =
-    profile?.role === 'admin';
-
-
-  const isClient =
-    task.client_id === user.id;
-
-
-  const isProfessional =
-    task.professional_id === user.id;
-
-
-  if (
-    !isAdmin &&
-    !isClient &&
-    !isProfessional
-  ) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Você não tem acesso ao chat desta tarefa.'
-      )
-    };
-
-  }
-
-
-  /*
-   * Não existe conversa.
-   *
-   * Cria usando:
-   *
-   * task_id
-   * client_id
-   * professional_id
-   */
-
-  const {
-    data: created,
-    error: createError
-  } = await sb
-    .from('conversations')
-    .insert({
-
-      task_id:
-        task.id,
-
-      client_id:
-        task.client_id,
-
-      professional_id:
-        task.professional_id
-
-    })
-    .select('*')
-    .single();
-
-
-  /*
-   * Pode ocorrer conflito se
-   * outro cliente/aba criou a conversa
-   * exatamente ao mesmo tempo.
-   *
-   * Nesse caso tenta buscar novamente.
-   */
-
-  if (
-    createError
-  ) {
-
-    console.warn(
-      'Não foi possível criar conversa. Tentando localizar existente:',
-      createError
-    );
-
-
-    const retry =
-      await getConversationByTask(
-        taskId
-      );
-
-
-    if (
-      retry.data
-    ) {
-
-      return retry;
-
-    }
-
-
-    return {
-      data: null,
-      error: createError
-    };
-
-  }
-
-
-  return {
-    data: created,
-    error: null
-  };
-
-}
-
-
-/**
- * Abre o chat da tarefa.
- */
 function openChat(
   taskId
 ) {
@@ -1975,32 +1674,18 @@ function openChat(
 
   }
 
-
-  const url =
+  window.location.href =
     `chat.html?task=${encodeURIComponent(
       taskId
     )}`;
 
-
-  window.location.href =
-    url;
-
 }
 
 
-/**
- * Obtém o task ID da URL.
- *
- * Aceita:
- *
- * ?task=UUID
- *
- * Também aceita:
- *
- * ?task_id=UUID
- *
- * para compatibilidade.
- */
+/* ============================================================
+   OBTER TASK ID DA URL
+============================================================ */
+
 function getChatTaskId() {
 
   try {
@@ -2009,7 +1694,6 @@ function getChatTaskId() {
       new URLSearchParams(
         window.location.search
       );
-
 
     return (
       params.get('task') ||
@@ -2021,7 +1705,7 @@ function getChatTaskId() {
   catch (error) {
 
     console.warn(
-      'Erro ao obter task ID:',
+      'Erro ao ler task da URL:',
       error
     );
 
@@ -2033,15 +1717,390 @@ function getChatTaskId() {
 
 
 /* ============================================================
-   CHAT — MENSAGENS
+   BUSCAR TAREFA
 ============================================================ */
 
+async function getTaskById(
+  taskId
+) {
 
-/**
- * Busca mensagens de uma conversa.
- */
+  if (
+    !sb ||
+    !taskId
+  ) {
+
+    return null;
+
+  }
+
+  const {
+    data,
+    error
+  } = await sb
+    .from('cleaning_requests')
+    .select('*')
+    .eq(
+      'id',
+      taskId
+    )
+    .maybeSingle();
+
+  if (error) {
+
+    console.error(
+      'Erro ao buscar tarefa:',
+      error
+    );
+
+    return null;
+
+  }
+
+  return data || null;
+
+}
+
+
+/* ============================================================
+   AUTORIZAÇÃO DO CHAT
+============================================================ */
+
+function isChatParticipant(
+  task,
+  userId,
+  role
+) {
+
+  if (
+    !task ||
+    !userId
+  ) {
+
+    return false;
+
+  }
+
+  if (
+    role === 'admin'
+  ) {
+
+    return true;
+
+  }
+
+  return (
+    String(task.client_id || '') ===
+      String(userId) ||
+
+    String(task.professional_id || '') ===
+      String(userId)
+  );
+
+}
+
+
+/* ============================================================
+   OBTER/CRIAR CONVERSA
+============================================================ */
+
+async function getOrCreateConversation(
+  taskId
+) {
+
+  if (
+    !sb ||
+    !taskId
+  ) {
+
+    throw new Error(
+      'Tarefa inválida.'
+    );
+
+  }
+
+  const user =
+    await getCurrentUser();
+
+  if (!user) {
+
+    throw new Error(
+      'Usuário não autenticado.'
+    );
+
+  }
+
+  const task =
+    await getTaskById(
+      taskId
+    );
+
+  if (!task) {
+
+    throw new Error(
+      'Tarefa não encontrada.'
+    );
+
+  }
+
+  const profile =
+    await getCurrentProfile(
+      user.id
+    );
+
+  const role =
+    profile?.role ||
+    '';
+
+  if (
+    !isChatParticipant(
+      task,
+      user.id,
+      role
+    )
+  ) {
+
+    throw new Error(
+      'Você não tem permissão para acessar este chat.'
+    );
+
+  }
+
+
+  /*
+   * Primeiro tenta encontrar
+   * conversa existente.
+   */
+
+  let {
+    data: conversation,
+    error: findError
+  } = await sb
+    .from('conversations')
+    .select('*')
+    .eq(
+      'task_id',
+      taskId
+    )
+    .maybeSingle();
+
+
+  if (findError) {
+
+    console.error(
+      'Erro ao procurar conversa:',
+      findError
+    );
+
+    throw findError;
+
+  }
+
+
+  /*
+   * Se não existe, cria.
+   *
+   * O professional_id pode ser
+   * nulo caso a tarefa ainda não
+   * tenha profissional.
+   */
+
+  if (!conversation) {
+
+    const payload = {
+
+      task_id:
+        task.id,
+
+      client_id:
+        task.client_id,
+
+      professional_id:
+        task.professional_id || null
+
+    };
+
+
+    const {
+      data: created,
+      error: createError
+    } = await sb
+      .from('conversations')
+      .insert(
+        payload
+      )
+      .select('*')
+      .single();
+
+
+    if (
+      createError
+    ) {
+
+      /*
+       * Se outra aba/usuário criou
+       * simultaneamente, tenta buscar
+       * novamente.
+       */
+
+      const {
+        data: existingAfterConflict
+      } = await sb
+        .from('conversations')
+        .select('*')
+        .eq(
+          'task_id',
+          taskId
+        )
+        .maybeSingle();
+
+
+      if (
+        existingAfterConflict
+      ) {
+
+        conversation =
+          existingAfterConflict;
+
+      }
+      else {
+
+        console.error(
+          'Erro ao criar conversa:',
+          createError
+        );
+
+        throw createError;
+
+      }
+
+    }
+    else {
+
+      conversation =
+        created;
+
+    }
+
+  }
+
+
+  /*
+   * Atualiza participantes caso
+   * a conversa tenha sido criada
+   * antes de um profissional ser
+   * atribuído.
+   */
+
+  if (
+    conversation &&
+    (
+      String(
+        conversation.client_id || ''
+      ) !== String(
+        task.client_id || ''
+      ) ||
+      String(
+        conversation.professional_id || ''
+      ) !== String(
+        task.professional_id || ''
+      )
+    )
+  ) {
+
+    const {
+      data: synchronized,
+      error: syncError
+    } = await sb
+      .from('conversations')
+      .update({
+
+        client_id:
+          task.client_id,
+
+        professional_id:
+          task.professional_id || null,
+
+        updated_at:
+          new Date().toISOString()
+
+      })
+      .eq(
+        'id',
+        conversation.id
+      )
+      .select('*')
+      .single();
+
+    if (!syncError && synchronized) {
+
+      conversation =
+        synchronized;
+
+    }
+
+  }
+
+
+  activeChatConversation =
+    conversation;
+
+  return conversation;
+
+}
+
+
+/* ============================================================
+   BUSCAR CONVERSA EXISTENTE
+============================================================ */
+
+async function getConversationByTaskId(
+  taskId
+) {
+
+  if (
+    !sb ||
+    !taskId
+  ) {
+
+    return null;
+
+  }
+
+  const {
+    data,
+    error
+  } = await sb
+    .from('conversations')
+    .select('*')
+    .eq(
+      'task_id',
+      taskId
+    )
+    .maybeSingle();
+
+  if (error) {
+
+    console.error(
+      'Erro ao buscar conversa:',
+      error
+    );
+
+    return null;
+
+  }
+
+  return data || null;
+
+}
+
+
+/* ============================================================
+   BUSCAR MENSAGENS
+============================================================ */
+
 async function getChatMessages(
-  conversationId
+  conversationId,
+  options = {}
 ) {
 
   if (
@@ -2049,12 +2108,55 @@ async function getChatMessages(
     !conversationId
   ) {
 
-    return {
-      data: [],
-      error: new Error(
-        'Conversation ID não informado.'
+    return [];
+
+  }
+
+  const limit =
+    Math.min(
+      Math.max(
+        Number(
+          options.limit || 200
+        ),
+        1
+      ),
+      500
+    );
+
+  let query =
+    sb
+      .from('messages')
+      .select(`
+        id,
+        conversation_id,
+        sender_id,
+        content,
+        created_at
+      `)
+      .eq(
+        'conversation_id',
+        conversationId
       )
-    };
+      .order(
+        'created_at',
+        {
+          ascending: true
+        }
+      )
+      .limit(
+        limit
+      );
+
+
+  if (
+    options.before
+  ) {
+
+    query =
+      query.lt(
+        'created_at',
+        options.before
+      );
 
   }
 
@@ -2062,22 +2164,7 @@ async function getChatMessages(
   const {
     data,
     error
-  } = await sb
-    .from('messages')
-    .select(
-      'id, conversation_id, sender_id, content, created_at'
-    )
-    .eq(
-      'conversation_id',
-      conversationId
-    )
-    .order(
-      'created_at',
-      {
-        ascending: true
-      }
-    );
-
+  } = await query;
 
   if (error) {
 
@@ -2086,79 +2173,133 @@ async function getChatMessages(
       error
     );
 
+    throw error;
+
   }
 
-
-  return {
-    data: data || [],
-    error
-  };
+  return data || [];
 
 }
 
 
-/**
- * Envia mensagem.
- */
+/* ============================================================
+   ENVIAR MENSAGEM
+============================================================ */
+
 async function sendChatMessage(
   conversationId,
   content
 ) {
 
-  if (!sb) {
+  if (
+    !sb ||
+    !conversationId
+  ) {
 
-    return {
-      data: null,
-      error: new Error(
-        'Supabase não configurado.'
-      )
-    };
+    throw new Error(
+      'Conversa inválida.'
+    );
 
   }
 
-
-  const text =
+  const message =
     String(
       content || ''
     ).trim();
 
+  if (!message) {
 
-  if (!conversationId) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Conversa não informada.'
-      )
-    };
+    throw new Error(
+      'Digite uma mensagem.'
+    );
 
   }
 
+  if (
+    message.length >
+    5000
+  ) {
 
-  if (!text) {
-
-    return {
-      data: null,
-      error: new Error(
-        'Digite uma mensagem.'
-      )
-    };
+    throw new Error(
+      'A mensagem não pode ultrapassar 5000 caracteres.'
+    );
 
   }
-
 
   const user =
-    await getAuthenticatedUser();
-
+    await getCurrentUser();
 
   if (!user) {
 
-    return {
-      data: null,
-      error: new Error(
-        'Usuário não autenticado.'
-      )
-    };
+    throw new Error(
+      'Usuário não autenticado.'
+    );
+
+  }
+
+
+  /*
+   * Confirma que a conversa
+   * pertence ao usuário.
+   */
+
+  const {
+    data: conversation,
+    error: conversationError
+  } = await sb
+    .from('conversations')
+    .select(`
+      id,
+      task_id,
+      client_id,
+      professional_id
+    `)
+    .eq(
+      'id',
+      conversationId
+    )
+    .maybeSingle();
+
+  if (conversationError) {
+
+    throw conversationError;
+
+  }
+
+  if (!conversation) {
+
+    throw new Error(
+      'Conversa não encontrada.'
+    );
+
+  }
+
+  const profile =
+    await getCurrentProfile(
+      user.id
+    );
+
+  const role =
+    profile?.role ||
+    '';
+
+  if (
+    role !== 'admin' &&
+    String(
+      conversation.client_id || ''
+    ) !== String(
+      user.id
+    ) &&
+    String(
+      conversation.professional_id || ''
+    ) !== String(
+      user.id
+    )
+  ) {
+
+    throw new Error(
+      'Você não tem permissão para enviar mensagens nesta conversa.'
+    );
 
   }
 
@@ -2177,14 +2318,17 @@ async function sendChatMessage(
         user.id,
 
       content:
-        text
+        message
 
     })
-    .select(
-      'id, conversation_id, sender_id, content, created_at'
-    )
+    .select(`
+      id,
+      conversation_id,
+      sender_id,
+      content,
+      created_at
+    `)
     .single();
-
 
   if (error) {
 
@@ -2193,34 +2337,77 @@ async function sendChatMessage(
       error
     );
 
+    throw error;
+
   }
 
 
-  return {
-    data: data || null,
-    error
-  };
+  /*
+   * Atualiza timestamp da conversa.
+   */
+
+  await sb
+    .from('conversations')
+    .update({
+
+      updated_at:
+        new Date().toISOString()
+
+    })
+    .eq(
+      'id',
+      conversationId
+    );
+
+
+  return data;
 
 }
 
 
 /* ============================================================
-   CHAT — REALTIME
+   REALTIME DO CHAT
 ============================================================ */
 
-let chatRealtimeChannel =
-  null;
+function stopChatRealtime() {
+
+  if (
+    !sb ||
+    !chatRealtimeChannel
+  ) {
+
+    return;
+
+  }
+
+  try {
+
+    sb.removeChannel(
+      chatRealtimeChannel
+    );
+
+  }
+  catch (error) {
+
+    console.warn(
+      'Erro ao remover realtime do chat:',
+      error
+    );
+
+  }
+
+  chatRealtimeChannel =
+    null;
+
+}
 
 
-/**
- * Inicia realtime das mensagens.
- *
- * Escuta SOMENTE a conversa atual.
- */
 function startChatRealtime(
   conversationId,
   callback
 ) {
+
+  stopChatRealtime();
 
   if (
     !sb ||
@@ -2231,23 +2418,20 @@ function startChatRealtime(
 
   }
 
-
-  stopChatRealtime();
-
-
-  const channelName =
-    'cleansync-chat-' +
-    String(conversationId) +
-    '-' +
-    Date.now();
+  chatMessagesCallback =
+    typeof callback === 'function'
+      ? callback
+      : null;
 
 
   chatRealtimeChannel =
     sb
       .channel(
-        channelName
+        'cleansync-chat-' +
+        conversationId +
+        '-' +
+        Date.now()
       )
-
 
       .on(
 
@@ -2266,12 +2450,11 @@ function startChatRealtime(
           try {
 
             if (
-              typeof callback ===
+              typeof chatMessagesCallback ===
               'function'
             ) {
 
-              callback(
-                payload.new,
+              chatMessagesCallback(
                 payload
               );
 
@@ -2281,7 +2464,7 @@ function startChatRealtime(
           catch (error) {
 
             console.error(
-              'Erro no callback do chat:',
+              'Chat realtime callback:',
               error
             );
 
@@ -2291,12 +2474,11 @@ function startChatRealtime(
 
       )
 
-
       .subscribe(
         status => {
 
           console.log(
-            'CleanSync Chat Realtime:',
+            'CleanSync chat realtime:',
             status
           );
 
@@ -2309,27 +2491,157 @@ function startChatRealtime(
 }
 
 
-/**
- * Para realtime do chat.
- */
-function stopChatRealtime() {
+/* ============================================================
+   INICIALIZAR CHAT
+============================================================ */
+
+async function initChat(
+  taskId,
+  callbacks = {}
+) {
+
+  try {
+
+    if (!taskId) {
+
+      throw new Error(
+        'Nenhuma tarefa foi informada.'
+      );
+
+    }
+
+    const conversation =
+      await getOrCreateConversation(
+        taskId
+      );
+
+    const messages =
+      await getChatMessages(
+        conversation.id
+      );
+
+
+    /*
+     * Realtime
+     */
+
+    startChatRealtime(
+      conversation.id,
+      payload => {
+
+        if (
+          typeof callbacks.onMessage ===
+          'function'
+        ) {
+
+          callbacks.onMessage(
+            payload.new
+          );
+
+        }
+
+      }
+    );
+
+
+    if (
+      typeof callbacks.onReady ===
+      'function'
+    ) {
+
+      callbacks.onReady({
+
+        taskId,
+
+        conversation,
+
+        messages
+
+      });
+
+    }
+
+
+    return {
+
+      taskId,
+
+      conversation,
+
+      messages
+
+    };
+
+  }
+  catch (error) {
+
+    console.error(
+      'Erro ao inicializar chat:',
+      error
+    );
+
+
+    if (
+      typeof callbacks.onError ===
+      'function'
+    ) {
+
+      callbacks.onError(
+        error
+      );
+
+    }
+
+
+    return null;
+
+  }
+
+}
+
+
+/* ============================================================
+   DESTRUIR CHAT
+============================================================ */
+
+function destroyChat() {
+
+  stopChatRealtime();
+
+  activeChatConversation =
+    null;
+
+  chatMessagesCallback =
+    null;
+
+}
+
+
+/* ============================================================
+   REALTIME GLOBAL
+============================================================ */
+
+let realtimeChannel = null;
+
+
+function stopRealtime() {
 
   if (
     sb &&
-    chatRealtimeChannel
+    realtimeChannel
   ) {
 
     try {
 
       sb.removeChannel(
-        chatRealtimeChannel
+        realtimeChannel
       );
 
     }
     catch (error) {
 
       console.warn(
-        'Erro ao remover realtime do chat:',
+        'Erro ao remover realtime:',
         error
       );
 
@@ -2337,699 +2649,10 @@ function stopChatRealtime() {
 
   }
 
-
-  chatRealtimeChannel =
+  realtimeChannel =
     null;
 
 }
-
-
-/**
- * Inicialização automática
- * do chat.html.
- *
- * Esta função não exige que
- * chat.html use obrigatoriamente
- * uma estrutura específica.
- *
- * Se os elementos existirem,
- * ela conecta automaticamente:
- *
- * #chatMessages
- * #chatInput
- * #chatSendButton
- * #chatTitle
- */
-async function initializeChatPage() {
-
-  /*
-   * Só executa se estiver
-   * realmente na página do chat.
-   */
-
-  const isChatPage =
-    /chat\.html$/i.test(
-      window.location.pathname
-    ) ||
-    document.getElementById(
-      'chatMessages'
-    ) ||
-    document.getElementById(
-      'chatInput'
-    );
-
-
-  if (!isChatPage) {
-
-    return null;
-
-  }
-
-
-  const taskId =
-    getChatTaskId();
-
-
-  if (!taskId) {
-
-    console.warn(
-      'Chat: task ID não informado.'
-    );
-
-    return null;
-
-  }
-
-
-  const user =
-    await getAuthenticatedUser();
-
-
-  if (!user) {
-
-    window.location.href =
-      'index.html';
-
-    return null;
-
-  }
-
-
-  /*
-   * Obtém/cria conversa.
-   */
-
-  const conversationResult =
-    await getOrCreateConversation(
-      taskId
-    );
-
-
-  if (
-    conversationResult.error ||
-    !conversationResult.data
-  ) {
-
-    console.error(
-      'Erro ao abrir conversa:',
-      conversationResult.error
-    );
-
-
-    showSnackbar(
-      conversationResult.error?.message ||
-      'Não foi possível abrir o chat.'
-    );
-
-
-    return null;
-
-  }
-
-
-  const conversation =
-    conversationResult.data;
-
-
-  /*
-   * Carrega título da tarefa
-   * quando possível.
-   */
-
-  const {
-    data: task
-  } = await sb
-    .from('cleaning_requests')
-    .select(
-      'id, ref_code, address, client_id, professional_id'
-    )
-    .eq(
-      'id',
-      taskId
-    )
-    .maybeSingle();
-
-
-  const chatTitle =
-    document.getElementById(
-      'chatTitle'
-    );
-
-
-  if (chatTitle) {
-
-    chatTitle.textContent =
-      task?.ref_code
-        ? `Chat — ${task.ref_code}`
-        : 'Chat da limpeza';
-
-  }
-
-
-  /*
-   * Carrega mensagens.
-   */
-
-  const messagesResult =
-    await getChatMessages(
-      conversation.id
-    );
-
-
-  if (
-    messagesResult.error
-  ) {
-
-    showSnackbar(
-      'Erro ao carregar mensagens.'
-    );
-
-  }
-
-
-  /*
-   * Renderizador padrão.
-   *
-   * Se o chat.html possuir
-   * uma função própria chamada
-   * window.renderChatMessages,
-   * usamos ela.
-   */
-
-  const renderMessages =
-    messages => {
-
-      if (
-        typeof window.renderChatMessages ===
-        'function'
-      ) {
-
-        window.renderChatMessages(
-          messages,
-          user.id,
-          conversation
-        );
-
-        return;
-
-      }
-
-
-      const container =
-        document.getElementById(
-          'chatMessages'
-        );
-
-
-      if (!container) {
-
-        return;
-
-      }
-
-
-      container.innerHTML =
-        messages.map(
-          message => {
-
-            const own =
-              message.sender_id ===
-              user.id;
-
-
-            const time =
-              message.created_at
-                ? new Date(
-                    message.created_at
-                  ).toLocaleTimeString(
-                    'pt-BR',
-                    {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }
-                  )
-                : '';
-
-
-            return `
-
-              <div
-                class="chat-message ${
-                  own
-                    ? 'chat-message-own'
-                    : 'chat-message-other'
-                }"
-                data-message-id="${escapeAttr(
-                  message.id
-                )}"
-              >
-
-                <div class="chat-message-content">
-                  ${escapeHtml(
-                    message.content
-                  )}
-                </div>
-
-                <div class="chat-message-time">
-                  ${escapeHtml(
-                    time
-                  )}
-                </div>
-
-              </div>
-
-            `;
-
-          }
-        ).join('');
-
-
-      container.scrollTop =
-        container.scrollHeight;
-
-    };
-
-
-  renderMessages(
-    messagesResult.data || []
-  );
-
-
-  /*
-   * Realtime.
-   */
-
-  startChatRealtime(
-    conversation.id,
-    async message => {
-
-      /*
-       * Se o chat.html possui
-       * renderizador próprio,
-       * deixa ele cuidar da UI.
-       */
-
-      if (
-        typeof window.handleIncomingChatMessage ===
-        'function'
-      ) {
-
-        window.handleIncomingChatMessage(
-          message,
-          user.id,
-          conversation
-        );
-
-        return;
-
-      }
-
-
-      /*
-       * Caso contrário,
-       * adiciona a mensagem
-       * carregando novamente
-       * apenas quando necessário.
-       */
-
-      const latest =
-        await getChatMessages(
-          conversation.id
-        );
-
-
-      if (!latest.error) {
-
-        renderMessages(
-          latest.data
-        );
-
-      }
-
-    }
-  );
-
-
-  /*
-   * Envio de mensagem padrão.
-   */
-
-  const input =
-    document.getElementById(
-      'chatInput'
-    );
-
-
-  const sendButton =
-    document.getElementById(
-      'chatSendButton'
-    ) ||
-    document.getElementById(
-      'sendChatButton'
-    );
-
-
-  async function sendCurrentMessage() {
-
-    if (!input) {
-
-      return;
-
-    }
-
-
-    const text =
-      input.value.trim();
-
-
-    if (!text) {
-
-      return;
-
-    }
-
-
-    if (sendButton) {
-
-      sendButton.disabled =
-        true;
-
-    }
-
-
-    const result =
-      await sendChatMessage(
-        conversation.id,
-        text
-      );
-
-
-    if (sendButton) {
-
-      sendButton.disabled =
-        false;
-
-    }
-
-
-    if (result.error) {
-
-      showSnackbar(
-        result.error.message ||
-        'Erro ao enviar mensagem.'
-      );
-
-      return;
-
-    }
-
-
-    input.value = '';
-
-
-    /*
-     * Em instalações onde o Realtime
-     * demora alguns instantes,
-     * atualizamos imediatamente.
-     */
-
-    if (
-      result.data
-    ) {
-
-      if (
-        typeof window.handleIncomingChatMessage ===
-        'function'
-      ) {
-
-        window.handleIncomingChatMessage(
-          result.data,
-          user.id,
-          conversation
-        );
-
-      }
-      else {
-
-        const latest =
-          await getChatMessages(
-            conversation.id
-          );
-
-
-        if (!latest.error) {
-
-          renderMessages(
-            latest.data
-          );
-
-        }
-
-      }
-
-    }
-
-  }
-
-
-  if (sendButton) {
-
-    /*
-     * Remove listeners anteriores
-     * registrados pela função.
-     */
-
-    if (
-      !sendButton.dataset.cleansyncBound
-    ) {
-
-      sendButton.addEventListener(
-        'click',
-        sendCurrentMessage
-      );
-
-
-      sendButton.dataset.cleansyncBound =
-        'true';
-
-    }
-
-  }
-
-
-  if (input) {
-
-    if (
-      !input.dataset.cleansyncBound
-    ) {
-
-      input.addEventListener(
-        'keydown',
-        event => {
-
-          /*
-           * Enter envia.
-           *
-           * Shift + Enter
-           * cria nova linha.
-           */
-
-          if (
-            event.key === 'Enter' &&
-            !event.shiftKey
-          ) {
-
-            event.preventDefault();
-
-            sendCurrentMessage();
-
-          }
-
-        }
-      );
-
-
-      input.dataset.cleansyncBound =
-        'true';
-
-    }
-
-  }
-
-
-  return {
-
-    taskId,
-
-    conversation,
-
-    user,
-
-    task,
-
-    messages:
-      messagesResult.data || []
-
-  };
-
-}
-
-
-/* ============================================================
-   CRONÔMETRO
-============================================================ */
-
-let timerInterval = null;
-
-
-function attachTimers(
-  tasks = []
-) {
-
-  clearInterval(
-    timerInterval
-  );
-
-
-  function updateTimers() {
-
-    document
-      .querySelectorAll(
-        '.live-timer'
-      )
-      .forEach(
-        element => {
-
-          const start =
-            element.dataset.start;
-
-
-          const end =
-            element.dataset.end;
-
-
-          if (!start) {
-
-            element.textContent =
-              '00:00:00';
-
-            return;
-
-          }
-
-
-          const startDate =
-            new Date(start);
-
-
-          const endDate =
-            end
-              ? new Date(end)
-              : new Date();
-
-
-          let seconds =
-            Math.floor(
-              (
-                endDate.getTime() -
-                startDate.getTime()
-              ) / 1000
-            );
-
-
-          if (
-            !Number.isFinite(
-              seconds
-            ) ||
-            seconds < 0
-          ) {
-
-            seconds = 0;
-
-          }
-
-
-          element.textContent =
-            formatDuration(
-              seconds
-            );
-
-        }
-      );
-
-  }
-
-
-  updateTimers();
-
-
-  timerInterval =
-    setInterval(
-      updateTimers,
-      1000
-    );
-
-}
-
-
-function formatDuration(
-  totalSeconds
-) {
-
-  const seconds =
-    Math.max(
-      0,
-      Math.floor(
-        totalSeconds
-      )
-    );
-
-
-  const h =
-    Math.floor(
-      seconds / 3600
-    );
-
-
-  const m =
-    Math.floor(
-      (
-        seconds % 3600
-      ) / 60
-    );
-
-
-  const s =
-    seconds % 60;
-
-
-  return [
-
-    String(h).padStart(
-      2,
-      '0'
-    ),
-
-    String(m).padStart(
-      2,
-      '0'
-    ),
-
-    String(s).padStart(
-      2,
-      '0'
-    )
-
-  ].join(':');
-
-}
-
-
-/* ============================================================
-   REALTIME — TAREFAS
-============================================================ */
-
-let realtimeChannel = null;
 
 
 function startRealtime(
@@ -3042,25 +2665,7 @@ function startRealtime(
 
   }
 
-
-  if (realtimeChannel) {
-
-    try {
-
-      sb.removeChannel(
-        realtimeChannel
-      );
-
-    }
-    catch (error) {
-
-      console.warn(
-        error
-      );
-
-    }
-
-  }
+  stopRealtime();
 
 
   realtimeChannel =
@@ -3070,6 +2675,10 @@ function startRealtime(
         Date.now()
       )
 
+
+      /*
+       * Tarefas
+       */
 
       .on(
 
@@ -3100,7 +2709,109 @@ function startRealtime(
           catch (error) {
 
             console.error(
-              'Realtime callback error:',
+              'Realtime task callback:',
+              error
+            );
+
+          }
+
+        }
+
+      )
+
+
+      /*
+       * Conversas
+       */
+
+      .on(
+
+        'postgres_changes',
+
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations'
+        },
+
+        payload => {
+
+          try {
+
+            if (
+              typeof callback ===
+              'function'
+            ) {
+
+              callback({
+
+                ...payload,
+
+                table:
+                  'conversations'
+
+              });
+
+            }
+
+          }
+          catch (error) {
+
+            console.error(
+              'Realtime conversation callback:',
+              error
+            );
+
+          }
+
+        }
+
+      )
+
+
+      /*
+       * Mensagens
+       *
+       * Escuta mensagens globalmente.
+       * A autorização continua sendo
+       * feita pelas policies do Supabase.
+       */
+
+      .on(
+
+        'postgres_changes',
+
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+
+        payload => {
+
+          try {
+
+            if (
+              typeof callback ===
+              'function'
+            ) {
+
+              callback({
+
+                ...payload,
+
+                table:
+                  'messages'
+
+              });
+
+            }
+
+          }
+          catch (error) {
+
+            console.error(
+              'Realtime message callback:',
               error
             );
 
@@ -3129,7 +2840,7 @@ function startRealtime(
 
 
 /* ============================================================
-   ADMIN
+   ADMIN — EXCLUIR TAREFA
 ============================================================ */
 
 async function adminDeleteTask(
@@ -3142,20 +2853,18 @@ async function adminDeleteTask(
 
   }
 
-
   const confirmed =
     confirm(
       'Tem certeza que deseja excluir esta tarefa?\n\n' +
+      'A tarefa e os dados relacionados ao chat poderão ser removidos.\n' +
       'Esta ação não poderá ser desfeita.'
     );
-
 
   if (!confirmed) {
 
     return;
 
   }
-
 
   if (!sb) {
 
@@ -3168,12 +2877,90 @@ async function adminDeleteTask(
   }
 
 
+  /*
+   * Primeiro procura conversa.
+   */
+
+  let conversation = null;
+
+  try {
+
+    conversation =
+      await getConversationByTaskId(
+        id
+      );
+
+  }
+  catch (error) {
+
+    console.warn(
+      'Não foi possível localizar conversa:',
+      error
+    );
+
+  }
+
+
+  /*
+   * Exclui mensagens primeiro.
+   */
+
+  if (conversation?.id) {
+
+    const {
+      error: messagesError
+    } = await sb
+      .from('messages')
+      .delete()
+      .eq(
+        'conversation_id',
+        conversation.id
+      );
+
+    if (messagesError) {
+
+      console.warn(
+        'Não foi possível excluir mensagens:',
+        messagesError
+      );
+
+    }
+
+
+    /*
+     * Depois exclui conversa.
+     */
+
+    const {
+      error: conversationError
+    } = await sb
+      .from('conversations')
+      .delete()
+      .eq(
+        'id',
+        conversation.id
+      );
+
+    if (conversationError) {
+
+      console.warn(
+        'Não foi possível excluir conversa:',
+        conversationError
+      );
+
+    }
+
+  }
+
+
+  /*
+   * Finalmente exclui tarefa.
+   */
+
   const {
     error
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .delete()
     .eq(
       'id',
@@ -3187,12 +2974,10 @@ async function adminDeleteTask(
       error
     );
 
-
     alert(
       'Erro ao excluir tarefa:\n' +
       error.message
     );
-
 
     return;
 
@@ -3212,7 +2997,6 @@ async function adminDeleteTask(
     window.reloadTasks();
 
   }
-
   else if (
     typeof window.reloadRequests ===
     'function'
@@ -3250,11 +3034,8 @@ async function updateTask(
 
   }
 
-
   return await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .update(
       fields
     )
@@ -3267,8 +3048,24 @@ async function updateTask(
 
 
 /* ============================================================
-   PÁGINA DE CLIENTE
+   CANCELAR REQUISIÇÃO
 ============================================================ */
+
+/*
+   ALTERAÇÃO DEFINITIVA:
+
+   Antes:
+   DELETE da tarefa.
+
+   Agora:
+   status = cancelled
+
+   Assim:
+   - mantém histórico;
+   - mantém referências;
+   - não quebra o chat;
+   - não perde dados administrativos.
+*/
 
 async function cancelRequest(
   id
@@ -3280,14 +3077,22 @@ async function cancelRequest(
 
   }
 
-
   const confirmed =
     confirm(
       'Tem certeza que deseja cancelar esta requisição?'
     );
 
-
   if (!confirmed) {
+
+    return;
+
+  }
+
+  if (!sb) {
+
+    alert(
+      'Supabase não configurado.'
+    );
 
     return;
 
@@ -3297,10 +3102,13 @@ async function cancelRequest(
   const {
     error
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
-    .delete()
+    .from('cleaning_requests')
+    .update({
+
+      status:
+        'cancelled'
+
+    })
     .eq(
       'id',
       id
@@ -3332,6 +3140,14 @@ async function cancelRequest(
     window.reloadRequests();
 
   }
+  else if (
+    typeof window.reloadTasks ===
+    'function'
+  ) {
+
+    window.reloadTasks();
+
+  }
 
 }
 
@@ -3349,17 +3165,14 @@ function toggleEditForm(
       'editForm_' + id
     );
 
-
   if (!form) {
 
     return;
 
   }
 
-
   if (
-    form.style.display ===
-    'none' ||
+    form.style.display === 'none' ||
     !form.style.display
   ) {
 
@@ -3367,7 +3180,6 @@ function toggleEditForm(
       'block';
 
   }
-
   else {
 
     form.style.display =
@@ -3387,12 +3199,10 @@ async function saveEditRequest(
       'editDate_' + id
     );
 
-
   const timeInput =
     document.getElementById(
       'editTime_' + id
     );
-
 
   if (
     !dateInput ||
@@ -3403,14 +3213,11 @@ async function saveEditRequest(
 
   }
 
-
   const newDate =
     dateInput.value;
 
-
   const newTime =
     timeInput.value;
-
 
   if (
     !newDate ||
@@ -3425,13 +3232,20 @@ async function saveEditRequest(
 
   }
 
+  if (!sb) {
+
+    alert(
+      'Supabase não configurado.'
+    );
+
+    return;
+
+  }
 
   const {
     error
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .update({
 
       date:
@@ -3446,7 +3260,6 @@ async function saveEditRequest(
       id
     );
 
-
   if (error) {
 
     alert(
@@ -3458,11 +3271,9 @@ async function saveEditRequest(
 
   }
 
-
   showSnackbar(
     '✅ Requisição atualizada!'
   );
-
 
   if (
     typeof window.reloadRequests ===
@@ -3477,7 +3288,145 @@ async function saveEditRequest(
 
 
 /* ============================================================
-   CRONÔMETRO — CONTROLE
+   CRONÔMETRO
+============================================================ */
+
+let timerInterval = null;
+
+
+function attachTimers(
+  tasks = []
+) {
+
+  clearInterval(
+    timerInterval
+  );
+
+  function updateTimers() {
+
+    document
+      .querySelectorAll(
+        '.live-timer'
+      )
+      .forEach(
+        element => {
+
+          const start =
+            element.dataset.start;
+
+          const end =
+            element.dataset.end;
+
+          if (!start) {
+
+            element.textContent =
+              '00:00:00';
+
+            return;
+
+          }
+
+          const startDate =
+            new Date(
+              start
+            );
+
+          const endDate =
+            end
+              ? new Date(end)
+              : new Date();
+
+          let seconds =
+            Math.floor(
+              (
+                endDate.getTime() -
+                startDate.getTime()
+              ) / 1000
+            );
+
+          if (
+            !Number.isFinite(
+              seconds
+            ) ||
+            seconds < 0
+          ) {
+
+            seconds = 0;
+
+          }
+
+          element.textContent =
+            formatDuration(
+              seconds
+            );
+
+        }
+      );
+
+  }
+
+  updateTimers();
+
+  timerInterval =
+    setInterval(
+      updateTimers,
+      1000
+    );
+
+}
+
+
+function formatDuration(
+  totalSeconds
+) {
+
+  const seconds =
+    Math.max(
+      0,
+      Math.floor(
+        totalSeconds
+      )
+    );
+
+  const h =
+    Math.floor(
+      seconds / 3600
+    );
+
+  const m =
+    Math.floor(
+      (
+        seconds % 3600
+      ) / 60
+    );
+
+  const s =
+    seconds % 60;
+
+  return [
+
+    String(h).padStart(
+      2,
+      '0'
+    ),
+
+    String(m).padStart(
+      2,
+      '0'
+    ),
+
+    String(s).padStart(
+      2,
+      '0'
+    )
+
+  ].join(':');
+
+}
+
+
+/* ============================================================
+   INICIAR TRABALHO
 ============================================================ */
 
 async function startTimer(
@@ -3490,14 +3439,21 @@ async function startTimer(
 
   }
 
+  if (!sb) {
+
+    alert(
+      'Supabase não configurado.'
+    );
+
+    return;
+
+  }
 
   const {
     data: existing,
     error: fetchError
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .select(
       'status, work_start, work_end'
     )
@@ -3506,7 +3462,6 @@ async function startTimer(
       id
     )
     .single();
-
 
   if (fetchError) {
 
@@ -3518,7 +3473,6 @@ async function startTimer(
     return;
 
   }
-
 
   if (
     existing &&
@@ -3534,7 +3488,6 @@ async function startTimer(
 
   }
 
-
   if (
     existing &&
     existing.work_start &&
@@ -3549,13 +3502,10 @@ async function startTimer(
 
   }
 
-
   const {
     error
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .update({
 
       status:
@@ -3573,7 +3523,6 @@ async function startTimer(
       id
     );
 
-
   if (error) {
 
     alert(
@@ -3585,11 +3534,9 @@ async function startTimer(
 
   }
 
-
   showSnackbar(
     '⏱️ Trabalho iniciado!'
   );
-
 
   if (
     typeof window.reloadTasks ===
@@ -3599,7 +3546,6 @@ async function startTimer(
     window.reloadTasks();
 
   }
-
   else {
 
     location.reload();
@@ -3608,6 +3554,10 @@ async function startTimer(
 
 }
 
+
+/* ============================================================
+   FINALIZAR CRONÔMETRO
+============================================================ */
 
 async function stopTimer(
   id
@@ -3619,13 +3569,20 @@ async function stopTimer(
 
   }
 
+  if (!sb) {
+
+    alert(
+      'Supabase não configurado.'
+    );
+
+    return;
+
+  }
 
   const {
     error
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .update({
 
       work_end:
@@ -3636,7 +3593,6 @@ async function stopTimer(
       'id',
       id
     );
-
 
   if (error) {
 
@@ -3649,11 +3605,9 @@ async function stopTimer(
 
   }
 
-
   showSnackbar(
     '⏹️ Trabalho finalizado!'
   );
-
 
   if (
     typeof window.reloadTasks ===
@@ -3663,7 +3617,6 @@ async function stopTimer(
     window.reloadTasks();
 
   }
-
   else {
 
     location.reload();
@@ -3684,21 +3637,19 @@ async function toggleChecklistItem(
 
   if (
     !id ||
-    !itemId
+    !itemId ||
+    !sb
   ) {
 
     return;
 
   }
 
-
   const {
     data: row,
     error: fetchError
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .select(
       'checklist'
     )
@@ -3708,36 +3659,32 @@ async function toggleChecklistItem(
     )
     .single();
 
-
   if (fetchError) {
 
     console.error(
       fetchError
     );
 
-
     showSnackbar(
       'Erro ao carregar checklist.'
     );
 
-
     return;
 
   }
-
 
   const checklist =
     normalizeChecklist(
       row?.checklist
     );
 
-
   const updated =
     checklist.map(
       item => {
 
         if (
-          item.id === itemId
+          String(item.id) ===
+          String(itemId)
         ) {
 
           return {
@@ -3751,19 +3698,15 @@ async function toggleChecklistItem(
 
         }
 
-
         return item;
 
       }
     );
 
-
   const {
     error
   } = await sb
-    .from(
-      'cleaning_requests'
-    )
+    .from('cleaning_requests')
     .update({
 
       checklist:
@@ -3775,18 +3718,15 @@ async function toggleChecklistItem(
       id
     );
 
-
   if (error) {
 
     console.error(
       error
     );
 
-
     showSnackbar(
       'Erro ao atualizar checklist.'
     );
-
 
     if (
       typeof window.reloadTasks ===
@@ -3797,17 +3737,14 @@ async function toggleChecklistItem(
 
     }
 
-
     return;
 
   }
-
 
   const checkbox =
     document.getElementById(
       `ck_${itemId}_${id}`
     );
-
 
   if (checkbox) {
 
@@ -3815,7 +3752,6 @@ async function toggleChecklistItem(
       checkbox.closest(
         '.checklist-item'
       );
-
 
     if (itemDiv) {
 
@@ -3826,12 +3762,10 @@ async function toggleChecklistItem(
 
     }
 
-
     const task =
       checkbox.closest(
         '.task'
       );
-
 
     if (task) {
 
@@ -3840,18 +3774,15 @@ async function toggleChecklistItem(
           '.checklist-item input[type="checkbox"]'
         );
 
-
       const done =
         task.querySelectorAll(
           '.checklist-item input[type="checkbox"]:checked'
         ).length;
 
-
       const progress =
         task.querySelector(
           '.checklist-progress'
         );
-
 
       if (progress) {
 
@@ -3875,12 +3806,14 @@ async function completeTask(
   id
 ) {
 
-  if (!id) {
+  if (
+    !id ||
+    !sb
+  ) {
 
     return;
 
   }
-
 
   try {
 
@@ -3888,9 +3821,7 @@ async function completeTask(
       data: task,
       error: fetchError
     } = await sb
-      .from(
-        'cleaning_requests'
-      )
+      .from('cleaning_requests')
       .select('*')
       .eq(
         'id',
@@ -3898,13 +3829,11 @@ async function completeTask(
       )
       .single();
 
-
     if (fetchError) {
 
       throw fetchError;
 
     }
-
 
     if (!task) {
 
@@ -3914,19 +3843,16 @@ async function completeTask(
 
     }
 
-
     const checklist =
       normalizeChecklist(
         task.checklist
       );
-
 
     const allDone =
       checklist.length === 0 ||
       checklist.every(
         item => item.done
       );
-
 
     if (!allDone) {
 
@@ -3936,7 +3862,6 @@ async function completeTask(
           'Deseja concluir a tarefa mesmo assim?'
         );
 
-
       if (!continueAnyway) {
 
         return;
@@ -3944,7 +3869,6 @@ async function completeTask(
       }
 
     }
-
 
     if (
       !task.work_start ||
@@ -3960,14 +3884,11 @@ async function completeTask(
 
     }
 
-
     const {
       data: updatedTask,
       error: updateError
     } = await sb
-      .from(
-        'cleaning_requests'
-      )
+      .from('cleaning_requests')
       .update({
 
         status:
@@ -3984,18 +3905,15 @@ async function completeTask(
       .select()
       .single();
 
-
     if (updateError) {
 
       throw updateError;
 
     }
 
-
     showSnackbar(
       '✅ Tarefa concluída!'
     );
-
 
     if (
       typeof window.reloadTasks ===
@@ -4005,7 +3923,6 @@ async function completeTask(
       window.reloadTasks();
 
     }
-
 
     await notifyTaskCompleted(
       updatedTask
@@ -4018,7 +3935,6 @@ async function completeTask(
       'Erro ao concluir:',
       error
     );
-
 
     alert(
       'Erro ao concluir tarefa:\n' +
@@ -4034,7 +3950,7 @@ async function completeTask(
 
 
 /* ============================================================
-   NOTIFICAÇÃO DE TAREFA CONCLUÍDA
+   NOTIFICAÇÃO
 ============================================================ */
 
 async function notifyTaskCompleted(
@@ -4050,14 +3966,12 @@ async function notifyTaskCompleted(
 
   }
 
-
   try {
 
     const {
       data,
       error
     } = await sb.auth.getSession();
-
 
     if (
       error ||
@@ -4072,11 +3986,9 @@ async function notifyTaskCompleted(
 
     }
 
-
     const supabaseUrl =
       window.SUPABASE_URL ||
       SUPABASE_URL;
-
 
     if (
       !supabaseUrl ||
@@ -4092,7 +4004,6 @@ async function notifyTaskCompleted(
       return;
 
     }
-
 
     const response =
       await fetch(
@@ -4123,14 +4034,12 @@ async function notifyTaskCompleted(
         }
       );
 
-
     const result =
       await response
         .json()
         .catch(
           () => ({})
         );
-
 
     if (!response.ok) {
 
@@ -4142,7 +4051,6 @@ async function notifyTaskCompleted(
       return;
 
     }
-
 
     console.log(
       'Notificação processada:',
@@ -4173,19 +4081,18 @@ async function uploadPhotos(
 
   if (
     !id ||
-    !input
+    !input ||
+    !sb
   ) {
 
     return;
 
   }
 
-
   const files =
     Array.from(
       input.files || []
     );
-
 
   if (!files.length) {
 
@@ -4193,16 +4100,13 @@ async function uploadPhotos(
 
   }
 
-
   showSnackbar(
     '📤 Enviando fotos...'
   );
 
-
   try {
 
     const uploadedUrls = [];
-
 
     for (
       const file of files
@@ -4219,6 +4123,17 @@ async function uploadPhotos(
 
       }
 
+      if (
+        !file.type.startsWith(
+          'image/'
+        )
+      ) {
+
+        throw new Error(
+          `${file.name} não é uma imagem válida.`
+        );
+
+      }
 
       const safeName =
         file.name
@@ -4227,12 +4142,10 @@ async function uploadPhotos(
             '_'
           );
 
-
       const path =
         `${id}/${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 8)}-${safeName}`;
-
 
       const {
         error: uploadError
@@ -4248,13 +4161,11 @@ async function uploadPhotos(
           }
         );
 
-
       if (uploadError) {
 
         throw uploadError;
 
       }
-
 
       const {
         data
@@ -4265,7 +4176,6 @@ async function uploadPhotos(
         .getPublicUrl(
           path
         );
-
 
       if (
         data?.publicUrl
@@ -4279,7 +4189,6 @@ async function uploadPhotos(
 
     }
 
-
     if (!uploadedUrls.length) {
 
       throw new Error(
@@ -4288,14 +4197,11 @@ async function uploadPhotos(
 
     }
 
-
     const {
       data: row,
       error: fetchError
     } = await sb
-      .from(
-        'cleaning_requests'
-      )
+      .from('cleaning_requests')
       .select(
         'photos'
       )
@@ -4305,13 +4211,11 @@ async function uploadPhotos(
       )
       .single();
 
-
     if (fetchError) {
 
       throw fetchError;
 
     }
-
 
     const existingPhotos =
       Array.isArray(
@@ -4319,7 +4223,6 @@ async function uploadPhotos(
       )
         ? row.photos
         : [];
-
 
     const allPhotos = [
 
@@ -4329,13 +4232,10 @@ async function uploadPhotos(
 
     ];
 
-
     const {
       error: updateError
     } = await sb
-      .from(
-        'cleaning_requests'
-      )
+      .from('cleaning_requests')
       .update({
 
         photos:
@@ -4347,21 +4247,17 @@ async function uploadPhotos(
         id
       );
 
-
     if (updateError) {
 
       throw updateError;
 
     }
 
-
     input.value = '';
-
 
     showSnackbar(
       '📸 Fotos enviadas!'
     );
-
 
     if (
       typeof window.reloadTasks ===
@@ -4378,7 +4274,6 @@ async function uploadPhotos(
     console.error(
       error
     );
-
 
     alert(
       'Erro ao enviar fotos:\n' +
@@ -4404,7 +4299,6 @@ async function updateChecklistItemLabel(
       newLabel || ''
     ).trim();
 
-
   if (!label) {
 
     showSnackbar(
@@ -4415,15 +4309,14 @@ async function updateChecklistItemLabel(
 
   }
 
-
   const items =
     await getDefaultChecklist();
-
 
   const updated =
     items.map(
       item =>
-        item.id === itemId
+        String(item.id) ===
+        String(itemId)
           ? {
               ...item,
               label
@@ -4431,13 +4324,10 @@ async function updateChecklistItemLabel(
           : item
     );
 
-
   const {
     error
   } = await sb
-    .from(
-      'default_checklist'
-    )
+    .from('default_checklist')
     .update({
 
       items:
@@ -4452,7 +4342,6 @@ async function updateChecklistItemLabel(
       1
     );
 
-
   if (error) {
 
     alert(
@@ -4463,7 +4352,6 @@ async function updateChecklistItemLabel(
     return;
 
   }
-
 
   showSnackbar(
     '✅ Checklist atualizado.'
@@ -4477,7 +4365,6 @@ async function addChecklistItem() {
   const items =
     await getDefaultChecklist();
 
-
   items.push({
 
     id:
@@ -4489,13 +4376,10 @@ async function addChecklistItem() {
 
   });
 
-
   const {
     error
   } = await sb
-    .from(
-      'default_checklist'
-    )
+    .from('default_checklist')
     .update({
 
       items,
@@ -4509,7 +4393,6 @@ async function addChecklistItem() {
       1
     );
 
-
   if (error) {
 
     alert(
@@ -4521,11 +4404,9 @@ async function addChecklistItem() {
 
   }
 
-
   showSnackbar(
     '✅ Item adicionado.'
   );
-
 
   if (
     typeof window.loadChecklistEditor ===
@@ -4535,7 +4416,6 @@ async function addChecklistItem() {
     window.loadChecklistEditor();
 
   }
-
   else {
 
     location.reload();
@@ -4554,29 +4434,25 @@ async function removeChecklistItem(
       'Remover este item do checklist padrão?'
     );
 
-
   if (!confirmed) {
 
     return;
 
   }
 
-
   const items =
     (
       await getDefaultChecklist()
     ).filter(
       item =>
-        item.id !== itemId
+        String(item.id) !==
+        String(itemId)
     );
-
 
   const {
     error
   } = await sb
-    .from(
-      'default_checklist'
-    )
+    .from('default_checklist')
     .update({
 
       items,
@@ -4590,7 +4466,6 @@ async function removeChecklistItem(
       1
     );
 
-
   if (error) {
 
     alert(
@@ -4602,11 +4477,9 @@ async function removeChecklistItem(
 
   }
 
-
   showSnackbar(
     '🗑️ Item removido.'
   );
-
 
   if (
     typeof window.loadChecklistEditor ===
@@ -4616,7 +4489,6 @@ async function removeChecklistItem(
     window.loadChecklistEditor();
 
   }
-
   else {
 
     location.reload();
@@ -4627,7 +4499,7 @@ async function removeChecklistItem(
 
 
 /* ============================================================
-   PWA / INSTALL BANNER
+   PWA
 ============================================================ */
 
 let deferredInstallPrompt =
@@ -4662,19 +4534,15 @@ function setupInstallAndNotifyBanner() {
 
       }
 
-
       deferredInstallPrompt.prompt();
-
 
       const result =
         await deferredInstallPrompt.userChoice;
-
 
       console.log(
         'PWA install:',
         result
       );
-
 
       deferredInstallPrompt =
         null;
@@ -4697,7 +4565,6 @@ function registerCleanSyncServiceWorker() {
     return;
 
   }
-
 
   navigator.serviceWorker
     .register(
@@ -4728,7 +4595,7 @@ function registerCleanSyncServiceWorker() {
 
 
 /* ============================================================
-   INICIALIZAÇÃO GLOBAL
+   AUTO-INICIALIZAÇÃO
 ============================================================ */
 
 document.addEventListener(
@@ -4737,24 +4604,25 @@ document.addEventListener(
 
     setupInstallAndNotifyBanner();
 
+  }
+);
+
+
+/* ============================================================
+   LIMPEZA AO SAIR DA PÁGINA
+============================================================ */
+
+window.addEventListener(
+  'pagehide',
+  () => {
 
     /*
-     * Chat é inicializado somente
-     * se chat.html / elementos de
-     * chat estiverem presentes.
+     * Não remove o realtime global
+     * de forma agressiva em todas as
+     * páginas, mas encerra o chat.
      */
 
-    initializeChatPage()
-      .catch(
-        error => {
-
-          console.error(
-            'Erro na inicialização do chat:',
-            error
-          );
-
-        }
-      );
+    stopChatRealtime();
 
   }
 );
@@ -4768,7 +4636,9 @@ Object.assign(
   window,
   {
 
-    /* Supabase */
+    /*
+     * Supabase
+     */
 
     sb,
 
@@ -4776,13 +4646,17 @@ Object.assign(
     SUPABASE_ANON_KEY,
 
 
-    /* Configuração */
+    /*
+     * Configuração
+     */
 
     PRICE_BASE,
     PRICE_WITH_LAUNDRY,
 
 
-    /* Helpers */
+    /*
+     * Helpers
+     */
 
     debounce,
     escapeHtml,
@@ -4794,32 +4668,42 @@ Object.assign(
     formatDuration,
 
 
-    /* Snackbar */
+    /*
+     * Snackbar
+     */
 
     showSnackbar,
 
 
-    /* Sessão */
+    /*
+     * Sessão
+     */
 
     getSession,
     saveSession,
     clearSession,
 
 
-    /* Perfil */
+    /*
+     * Usuário/perfil
+     */
 
+    getCurrentUser,
     getCurrentProfile,
     getProfileName,
-    getAuthenticatedUser,
 
 
-    /* Auth */
+    /*
+     * Autenticação
+     */
 
     requireRole,
     logout,
 
 
-    /* Checklist */
+    /*
+     * Checklist
+     */
 
     getDefaultChecklist,
     normalizeChecklist,
@@ -4829,47 +4713,52 @@ Object.assign(
     getStatusClass,
 
 
-    /* Tasks */
+    /*
+     * Cards
+     */
 
     renderTaskCard,
 
+
+    /*
+     * Tarefas
+     */
+
+    getTaskById,
     updateTask,
 
-    cancelRequest,
 
-    toggleEditForm,
-    saveEditRequest,
-
-    adminDeleteTask,
-
-
-    /* Chat */
+    /*
+     * Chat
+     */
 
     openChat,
-
     getChatTaskId,
 
-    getConversationByTask,
-
+    getConversationByTaskId,
     getOrCreateConversation,
 
     getChatMessages,
-
     sendChatMessage,
 
     startChatRealtime,
-
     stopChatRealtime,
 
-    initializeChatPage,
+    initChat,
+    destroyChat,
 
 
-    /* Realtime */
+    /*
+     * Realtime
+     */
 
     startRealtime,
+    stopRealtime,
 
 
-    /* Timer */
+    /*
+     * Cronômetro
+     */
 
     attachTimers,
 
@@ -4878,29 +4767,50 @@ Object.assign(
     completeTask,
 
 
-    /* Checklist */
+    /*
+     * Checklist
+     */
 
     toggleChecklistItem,
 
 
-    /* Fotos */
+    /*
+     * Fotos
+     */
 
     uploadPhotos,
 
 
-    /* Notificação */
+    /*
+     * Cliente
+     */
 
-    notifyTaskCompleted,
+    toggleEditForm,
+    saveEditRequest,
+    cancelRequest,
 
 
-    /* Admin checklist */
+    /*
+     * Admin
+     */
+
+    adminDeleteTask,
 
     updateChecklistItemLabel,
     addChecklistItem,
     removeChecklistItem,
 
 
-    /* PWA */
+    /*
+     * Notificação
+     */
+
+    notifyTaskCompleted,
+
+
+    /*
+     * PWA
+     */
 
     setupInstallAndNotifyBanner,
     registerCleanSyncServiceWorker
@@ -4910,13 +4820,13 @@ Object.assign(
 
 
 /* ============================================================
-   LOG
+   LOG FINAL
 ============================================================ */
 
 console.log(
-  'CleanSync app-common carregado.'
+  'CleanSync app-common DEFINITIVO carregado.'
 );
 
 console.log(
-  'CleanSync Chat integrado: conversations.task_id → messages.conversation_id'
+  'Chat: conversations.task_id → messages.conversation_id'
 );
