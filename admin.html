@@ -6,7 +6,7 @@
 <title>CleanSync · Administração</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=10">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
@@ -45,6 +45,7 @@
     <div class="eyebrow">MODO ADMINISTRADOR</div>
     <h1>Gerenciar usuários</h1>
     <p class="lede">Veja quem tem conta, exclua contas de teste ou resete a senha de qualquer pessoa.</p>
+    <p class="lede" style="margin-top:6px; color:var(--pink-light);">Quer excluir tarefas ou editar valores? Isso fica na aba <a href="profissional.html" style="color:inherit; text-decoration:underline;">Tarefas</a>, que como admin mostra todas as requisições com botões extras.</p>
   </div>
 
   <div class="stats-grid" id="adminStatsGrid"></div>
@@ -53,7 +54,7 @@
   <div id="usersList"><div class="spinner"></div></div>
 </div>
 
-<script src="app-common.js?v=8"></script>
+<script src="app-common.js?v=10"></script>
 <script>
 let ctx;
 (async () => {
