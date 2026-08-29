@@ -10,6 +10,17 @@
 <meta name="theme-color" content="#15151A">
 <link rel="stylesheet" href="style.css?v=4">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+<script>
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  OneSignalDeferred.push(async function(OneSignal) {
+    await OneSignal.init({
+      appId: "6ece3179-2303-4614-a752-18378c461644",
+      serviceWorkerPath: "onesignal/OneSignalSDKWorker.js",
+      serviceWorkerParam: { scope: "/k213-limpezas/onesignal/" }
+    });
+  });
+</script>
 </head>
 <body>
 
