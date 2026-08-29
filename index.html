@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>K213 · Entrar</title>
+<title>CleanSync · Entrar</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=7">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
@@ -26,8 +26,8 @@
 
 <div class="auth-shell">
   <div class="auth-card">
-    <h1>K213</h1>
-    <p class="lede">Könizstrasse 213, Liebefeld — coordenação de limpezas entre cliente e profissional, sincronizada em tempo real.</p>
+    <h1>CleanSync</h1>
+    <p class="lede">Coordenação de limpezas entre cliente e profissional, sincronizada em tempo real.</p>
 
     <div class="tabs">
       <button id="tabBtn-login" class="active" onclick="switchTab('login')">Entrar</button>
@@ -95,9 +95,9 @@
   </div>
 </div>
 
-<script src="app-common.js?v=4"></script>
+<script src="app-common.js?v=7"></script>
 <script>
-if (!K213_CONFIGURED) renderSetupWarning();
+if (!APP_CONFIGURED) renderSetupWarning();
 
 // se já tem sessão, manda direto pra tela certa
 (function initRedirect(){
@@ -128,8 +128,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
     const user = await entrarComSenha(username, password);
-    setSession({ id: user.id, username: user.username, name: user.name, role: user.role });
-    window.location.href = user.role === 'profissional' ? 'profissional.html' : 'cliente.html';
+    const password_hash = await sha256Hex(password);
+    setSession({ id: user.id, username: user.username, name: user.name, role: user.role, password_hash });
+    window.location.href = user.role === 'admin' ? 'admin.html' : user.role === 'profissional' ? 'profissional.html' : 'cliente.html';
   } catch (err) {
     alert(err.message);
     btn.disabled = false; btn.textContent = 'Entrar';
@@ -179,6 +180,7 @@ document.getElementById('recoverForm').addEventListener('submit', async (e) => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('service-worker.js').catch(console.error);
 }
+if (typeof setupInstallAndNotifyBanner === 'function') setupInstallAndNotifyBanner();
 </script>
 </body>
 </html>
