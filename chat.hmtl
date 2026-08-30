@@ -357,6 +357,13 @@ content="#15151A"
 
     let currentProfile = null;
 
+    /*
+     * Sessão local completa (inclui password_hash), usada
+     * apenas para autenticar chamadas de RPC/Edge Function —
+     * nunca exibida na tela. Opção B não tem JWT do Supabase Auth.
+     */
+    let localSession = null;
+
     let cleaningId = null;
 
     let currentCleaning = null;
@@ -420,8 +427,14 @@ content="#15151A"
          * cliente, profissional e administrador.
          */
 
+        localSession =
+          (typeof getSession === 'function')
+            ? getSession()
+            : null;
+
+
         const context =
-          await getCurrentContext();
+          getCurrentContext();
 
 
         if (!context) {
@@ -468,113 +481,55 @@ content="#15151A"
 
     /* ======================================================
        CONTEXTO DO USUÁRIO
+       (Opção B — sessão local, sem sb.auth)
     ====================================================== */
 
-    async function getCurrentContext() {
+    function getCurrentContext() {
 
-      try {
+      /*
+       * getSession() do app-common.js é SÍNCRONO nesse modelo
+       * e retorna { id, username, name, role, password_hash, address }
+       * ou null se não houver sessão.
+       */
 
-        const {
-          data,
-          error
-        } =
-          await sb.auth.getSession();
-
-
-        if (error) {
-
-          throw error;
-
-        }
+      const session =
+        (typeof getSession === 'function')
+          ? getSession()
+          : null;
 
 
-        if (
-          !data ||
-          !data.session ||
-          !data.session.user
-        ) {
+      if (
+        !session ||
+        !session.id ||
+        !session.username ||
+        !session.password_hash
+      ) {
 
-          window.location.href =
-            'index.html';
-
-          return null;
-
-        }
-
-
-        const user =
-          data.session.user;
-
-
-        /*
-         * Busca o perfil do usuário.
-         */
-
-        const {
-          data: profile,
-          error: profileError
-        } =
-          await sb
-            .from('profiles')
-            .select('*')
-            .eq(
-              'id',
-              user.id
-            )
-            .single();
-
-
-        if (profileError) {
-
-          console.error(
-            'Erro ao buscar perfil:',
-            profileError
-          );
-
-          /*
-           * Caso o projeto use apenas
-           * dados do auth, ainda permitimos
-           * continuar sem perfil completo.
-           */
-
-          return {
-            user,
-            profile: {
-              id: user.id,
-              role: null,
-              name:
-                user.user_metadata?.name ||
-                user.user_metadata?.full_name ||
-                user.email ||
-                ''
-            }
-          };
-
-        }
-
-
-        return {
-          user,
-          profile
-        };
-
-
-      } catch(error) {
-
-        console.error(
-          'getCurrentContext:',
-          error
-        );
-
-
-        showError(
-          'Sessão inválida ou expirada.'
-        );
-
+        window.location.href =
+          'index.html';
 
         return null;
 
       }
+
+
+      const user = {
+        id: session.id,
+        username: session.username
+      };
+
+
+      const profile = {
+        id: session.id,
+        role: session.role || null,
+        name: session.name || session.username || ''
+      };
+
+
+      return {
+        user,
+        profile
+      };
 
     }
 
@@ -640,6 +595,19 @@ content="#15151A"
          * cleaning_request_id
          */
 
+        if (
+          !localSession ||
+          !localSession.username ||
+          !localSession.password_hash
+        ) {
+
+          throw new Error(
+            'Sessão inválida. Faça login novamente.'
+          );
+
+        }
+
+
         const {
           data,
           error
@@ -648,7 +616,13 @@ content="#15151A"
             'create_cleaning_conversation',
             {
               p_cleaning_id:
-                cleaningId
+                cleaningId,
+
+              p_username:
+                localSession.username,
+
+              p_password_hash:
+                localSession.password_hash
             }
           );
 
@@ -1750,7 +1724,9 @@ content="#15151A"
             {
               body: {
                 taskId: cleaningId,
-                message
+                message,
+                username: localSession?.username,
+                passwordHash: localSession?.password_hash
               }
             }
           );
