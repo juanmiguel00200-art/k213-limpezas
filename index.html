@@ -8,8 +8,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="ai-widget.css?v=1">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -45,7 +47,12 @@
         <label>Senha</label>
         <input type="password" id="loginPassword" autocomplete="current-password" required>
       </div>
-      <button type="submit" class="btn btn-accent" style="width:100%">Entrar</button>
+      <!-- Cloudflare Turnstile -->
+      <div class="cf-turnstile-container">
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAEh8x_IipM1eRICE" data-theme="dark" data-callback="onTurnstileSuccess"></div>
+      </div>
+      <button type="submit" class="btn btn-accent" style="width:100%" id="loginSubmitBtn" disabled>Entrar</button>
+      <p style="text-align:center; font-size:12px; color:var(--muted); margin-top:8px;" id="turnstileHint">✅ Complete a verificação do Cloudflare para continuar</p>
     </form>
 
     <!-- CRIAR CONTA -->
@@ -96,14 +103,26 @@
     <div class="auth-note" id="authNote">
       Não existe recuperação por e-mail aqui. Ao criar a conta, você recebe um <strong>código de recuperação</strong> — anote e guarde em lugar seguro. É a única forma de trocar sua senha se esquecer.
     </div>
+
+    <!-- Badge Cloudflare Edição Limitada -->
+    <div class="cf-footer-badge">
+      <a class="cf-badge cf-badge-lg" href="https://www.cloudflare.com" target="_blank" rel="noopener">
+        <svg class="cf-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M34.5 28.5c.3-.9.4-1.8.4-2.8 0-4.6-3.7-8.3-8.3-8.3-3.4 0-6.3 2-7.6 4.9-1.1-1-2.5-1.6-4.1-1.6-3.4 0-6.2 2.8-6.2 6.2 0 .4 0 .8.1 1.2-2.6.9-4.5 3.4-4.5 6.3 0 3.7 3 6.7 6.7 6.7h22.4c3.3 0 6-2.7 6-6 0-2.9-2-5.3-4.6-5.9z" fill="#F38020"/>
+          <path d="M34.5 28.5c.3-.9.4-1.8.4-2.8 0-4.6-3.7-8.3-8.3-8.3-3.4 0-6.3 2-7.6 4.9-1.1-1-2.5-1.6-4.1-1.6-3.4 0-6.2 2.8-6.2 6.2 0 .4 0 .8.1 1.2-2.6.9-4.5 3.4-4.5 6.3 0 3.7 3 6.7 6.7 6.7h22.4c3.3 0 6-2.7 6-6 0-2.9-2-5.3-4.6-5.9z" fill="#FAAE40" opacity="0.3"/>
+        </svg>
+        <span>Powered by <strong>Cloudflare</strong></span>
+        <span class="cf-limited">· Edição Limitada</span>
+      </a>
+      <div class="cf-tagline">Protegido por Turnstile · Hospedado em Cloudflare Pages</div>
+    </div>
   </div>
 </div>
 
-<script src="app-common.js?v=15"></script>
+<script src="app-common.js?v=16"></script>
 <script>
 if (!APP_CONFIGURED) renderSetupWarning();
 
-// se já tem sessão, manda direto pra tela certa
 (function initRedirect(){
   const session = getSession();
   if (session) window.location.href = session.role === 'profissional' ? 'profissional.html' : 'cliente.html';
@@ -128,12 +147,22 @@ function switchTab(tab){
   document.getElementById('authNote').innerHTML = notes[tab];
 }
 
+let turnstileToken = null;
+
+function onTurnstileSuccess(token) {
+  turnstileToken = token;
+  const btn = document.getElementById('loginSubmitBtn');
+  const hint = document.getElementById('turnstileHint');
+  if (btn) btn.disabled = false;
+  if (hint) { hint.textContent = '✅ Verificação concluída! Você já pode entrar.'; hint.style.color = '#4CAF50'; }
+}
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!turnstileToken) { alert('Por favor, complete a verificação do Cloudflare primeiro.'); return; }
   const btn = e.target.querySelector('button');
   const username = document.getElementById('loginUsername').value.trim();
   const password = document.getElementById('loginPassword').value;
-
   btn.disabled = true; btn.textContent = 'Entrando...';
   try {
     const user = await entrarComSenha(username, password);
@@ -143,6 +172,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   } catch (err) {
     alert(err.message);
     btn.disabled = false; btn.textContent = 'Entrar';
+    turnstileToken = null;
+    if (typeof turnstile !== 'undefined') turnstile.reset();
   }
 });
 
@@ -154,7 +185,6 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
   const password = document.getElementById('signupPassword').value;
   const role = document.querySelector('input[name=signupRole]:checked').value;
   const address = document.getElementById('signupAddress').value.trim();
-
   btn.disabled = true; btn.textContent = 'Criando...';
   try {
     const { user, recovery_code } = await criarConta(name, username, password, role, address);
@@ -173,7 +203,6 @@ document.getElementById('recoverForm').addEventListener('submit', async (e) => {
   const username = document.getElementById('recoverUsername').value.trim();
   const code = document.getElementById('recoverCode').value.trim();
   const newPassword = document.getElementById('recoverNewPassword').value;
-
   btn.disabled = true; btn.textContent = 'Redefinindo...';
   try {
     const newCode = await redefinirSenha(username, code, newPassword);
