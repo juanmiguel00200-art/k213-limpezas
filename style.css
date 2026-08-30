@@ -396,3 +396,78 @@ details.card summary span:last-child{ font-family:var(--mono); text-transform:no
 .notify-modal p{ color:var(--muted); font-size:13.5px; line-height:1.65; margin-bottom:26px; }
 .notify-actions{ display:flex; flex-direction:column; gap:10px; }
 .notify-actions .btn{ width:100%; }
+
+/* ============================================================
+   Casca do painel do cliente: sidebar fixa + área de conteúdo
+   com views trocadas via JS (sem recarregar página).
+   Usa as mesmas variáveis de cor de sempre — só muda a estrutura.
+   ============================================================ */
+.app-shell{ display:grid; grid-template-columns:250px 1fr; min-height:100vh; }
+
+.side{
+  position:fixed; top:0; left:0; bottom:0; width:250px;
+  background:rgba(7,0,13,.92); backdrop-filter:blur(20px);
+  border-right:1px solid var(--border);
+  padding:22px 16px; display:flex; flex-direction:column; z-index:100;
+}
+.side .brand{ display:flex; align-items:center; gap:11px; padding:4px 6px 22px; border-bottom:1px solid var(--border); margin-bottom:18px; text-decoration:none; }
+.side-label{ font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.14em; font-weight:700; padding:0 8px; margin-bottom:10px; }
+.side-nav{ display:flex; flex-direction:column; gap:4px; margin-bottom:20px; }
+.side-link{
+  width:100%; border:0; background:transparent; color:var(--muted);
+  padding:12px 13px; border-radius:12px; display:flex; align-items:center; gap:11px;
+  text-align:left; font-size:12.5px; font-weight:600; cursor:pointer; transition:.18s;
+  font-family:var(--sans);
+}
+.side-link:hover{ color:var(--cream); background:rgba(255,255,255,.03); }
+.side-link.active{ color:var(--cream); background:linear-gradient(135deg,var(--wine),var(--pink)); }
+.side-bottom{ margin-top:auto; display:flex; flex-direction:column; gap:12px; }
+.side-who{ font-size:11.5px; color:var(--muted); padding:0 6px; }
+
+.main-area{ grid-column:2; min-width:0; margin-left:250px; }
+.area-top{
+  height:64px; position:sticky; top:0; z-index:80; display:flex; align-items:center;
+  padding:0 28px; border-bottom:1px solid var(--border);
+  background:rgba(7,0,13,.82); backdrop-filter:blur(18px);
+}
+.crumbs{ font-family:var(--mono); font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+.crumbs span:last-child{ color:var(--pink-light); }
+.crumbs i{ margin:0 8px; opacity:.5; font-style:normal; }
+
+.view{ display:none; }
+.view.active{ display:block; animation:fadein .3s ease; }
+
+.dash-grid{ display:grid; grid-template-columns:1.4fr .9fr; gap:20px; align-items:start; }
+@media (max-width:900px){ .dash-grid{ grid-template-columns:1fr; } }
+
+/* painel "próximo serviço" com linha do tempo de status */
+.timeline{ display:flex; flex-direction:column; }
+.timeline-item{ display:flex; gap:12px; padding-bottom:18px; position:relative; }
+.timeline-item:last-child{ padding-bottom:0; }
+.timeline-line{ position:absolute; left:4px; top:12px; bottom:0; width:1px; background:var(--border-strong); }
+.timeline-item:last-child .timeline-line{ display:none; }
+.timeline-dot{ width:9px; height:9px; border-radius:50%; background:var(--dark4); border:2px solid var(--dark2); box-shadow:0 0 0 1px var(--border-strong); z-index:2; margin-top:3px; flex-shrink:0; }
+.timeline-item.done .timeline-dot{ background:var(--success); box-shadow:0 0 0 1px var(--success-bg), 0 0 10px var(--success-bg); }
+.timeline-item.current .timeline-dot{ background:var(--pink); box-shadow:0 0 0 1px rgba(196,26,72,.2), 0 0 12px rgba(196,26,72,.45); }
+.timeline-text strong{ display:block; font-size:12.5px; color:var(--cream); margin-bottom:3px; }
+.timeline-text span{ color:var(--muted); font-size:11px; }
+
+@media (max-width:900px){
+  .app-shell{ grid-template-columns:1fr; }
+  .side{ display:none; }
+  .main-area{ margin-left:0; grid-column:1; }
+  .mobile-side-nav{
+    display:grid; grid-template-columns:repeat(3,1fr); position:fixed; left:10px; right:10px; bottom:10px;
+    background:rgba(7,0,13,.94); border:1px solid var(--border); border-radius:18px; backdrop-filter:blur(20px);
+    z-index:150; box-shadow:0 15px 40px rgba(0,0,0,.4);
+  }
+  .mobile-side-nav button{
+    border:0; background:none; color:var(--muted); display:flex; flex-direction:column; align-items:center;
+    gap:5px; padding:12px 0; font-size:10px; font-weight:700; cursor:pointer; font-family:var(--sans);
+  }
+  .mobile-side-nav button.active{ color:var(--pink-light); }
+  .wrap{ padding-bottom:90px; }
+}
+@media (min-width:901px){
+  .mobile-side-nav{ display:none; }
+}
