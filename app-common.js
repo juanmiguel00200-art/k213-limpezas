@@ -478,6 +478,18 @@ function renderTaskCard(req, mode){
     </div>`;
   }
 
+  // botão de mensagens fica disponível em todos os modos com tarefa de verdade
+  actionsHtml += `<div class="task-actions">
+    <button class="btn btn-outline" onclick="toggleChat('${req.id}')">💬 Mensagens <span class="chat-badge" id="chatBadge_${req.id}" style="display:none;"></span></button>
+  </div>`;
+  const chatHtml = `<div class="chat-box" id="chatBox_${req.id}" style="display:none;">
+    <div class="chat-messages" id="chatMessages_${req.id}"><div class="spinner" style="margin:20px auto;"></div></div>
+    <form class="chat-input-row" onsubmit="sendChatMessage(event, '${req.id}')">
+      <input type="text" id="chatInput_${req.id}" placeholder="Escreva uma mensagem…" autocomplete="off">
+      <button type="submit" class="btn btn-accent" style="clip-path:none;">Enviar</button>
+    </form>
+  </div>`;
+
   return `
   <div class="task ${req.status}">
     <div class="task-top">
@@ -504,5 +516,103 @@ function renderTaskCard(req, mode){
     ${mode === 'client' ? photosHtml : ''}
     ${actionsHtml}
     ${editFormHtml}
+    ${mode !== 'preview' ? chatHtml : ''}
   </div>`;
+}
+
+/* ---------- chat por tarefa ---------- */
+const _chatOpen = new Set();       // ids de tarefa com o chat aberto na tela
+const _chatChannels = {};          // canais realtime ativos, por id de tarefa
+const _chatUnread = {};            // contagem de não lidas, por id de tarefa
+
+async function toggleChat(requestId){
+  const box = document.getElementById('chatBox_' + requestId);
+  if (!box) return;
+  const isOpen = box.style.display !== 'none';
+  if (isOpen) {
+    box.style.display = 'none';
+    _chatOpen.delete(requestId);
+    return;
+  }
+  box.style.display = 'block';
+  _chatOpen.add(requestId);
+  clearChatBadge(requestId);
+  await loadChatMessages(requestId);
+  subscribeChat(requestId);
+  const input = document.getElementById('chatInput_' + requestId);
+  if (input) input.focus();
+}
+
+function clearChatBadge(requestId){
+  _chatUnread[requestId] = 0;
+  const badge = document.getElementById('chatBadge_' + requestId);
+  if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+}
+
+function renderChatMessages(requestId, messages){
+  const container = document.getElementById('chatMessages_' + requestId);
+  if (!container) return;
+  const session = getSession();
+  if (!messages.length) {
+    container.innerHTML = '<p style="color:var(--muted); font-size:12.5px; text-align:center; padding:14px 0;">Nenhuma mensagem ainda. Escreva a primeira!</p>';
+    return;
+  }
+  container.innerHTML = messages.map(m => {
+    const mine = session && session.username === m.sender_username;
+    const time = new Date(m.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="chat-bubble ${mine ? 'mine' : ''}">
+      <div class="chat-bubble-meta">${escapeHtml(m.sender_name)} · ${time}</div>
+      <div class="chat-bubble-content">${escapeHtml(m.content)}</div>
+    </div>`;
+  }).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+async function loadChatMessages(requestId){
+  const { data, error } = await sb.from('mensagens').select('*').eq('request_id', requestId).order('created_at', { ascending: true });
+  if (error) { console.error(error); return; }
+  renderChatMessages(requestId, data || []);
+}
+
+function subscribeChat(requestId){
+  if (_chatChannels[requestId]) return; // já assinado
+  _chatChannels[requestId] = sb
+    .channel('mensagens_' + requestId)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensagens', filter: `request_id=eq.${requestId}` }, () => {
+      if (_chatOpen.has(requestId)) {
+        loadChatMessages(requestId);
+      } else {
+        _chatUnread[requestId] = (_chatUnread[requestId] || 0) + 1;
+        const badge = document.getElementById('chatBadge_' + requestId);
+        if (badge) { badge.style.display = 'inline-block'; badge.textContent = _chatUnread[requestId]; }
+      }
+    })
+    .subscribe();
+}
+
+async function sendChatMessage(evt, requestId){
+  evt.preventDefault();
+  const input = document.getElementById('chatInput_' + requestId);
+  const content = input.value.trim();
+  if (!content) return;
+  const session = getSession();
+  input.value = '';
+  input.disabled = true;
+  const { error } = await sb.from('mensagens').insert({
+    request_id: requestId,
+    sender_role: session.role,
+    sender_name: session.name,
+    sender_username: session.username,
+    content
+  });
+  input.disabled = false;
+  input.focus();
+  if (error) { alert('Erro ao enviar: ' + error.message); return; }
+  await loadChatMessages(requestId);
+}
+
+// assina notificação de mensagem nova em tarefas ainda não abertas na tela,
+// pra acender o badge de "não lida" sem precisar abrir o chat primeiro.
+function watchChatBadgesFor(requestIds){
+  requestIds.forEach(id => subscribeChat(id));
 }
