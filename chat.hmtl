@@ -1,8 +1,7 @@
 <!DOCTYPE html><html lang="pt-BR"><head>  <meta charset="UTF-8"><meta
 name="viewport"
 content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-
-«»
+>
 
   <title>CleanSync · Chat</title>  <link rel="preconnect" href="https://fonts.googleapis.com">  <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap"
@@ -13,8 +12,7 @@ content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   ><meta
 name="theme-color"
 content="#15151A"
-
-«»
+>
 
   <link
     rel="stylesheet"
@@ -97,6 +95,15 @@ content="#15151A"
 
 
   <span id="topWhoName"></span>
+
+
+  <button
+    type="button"
+    class="btn btn-outline"
+    onclick="openAiModal()"
+  >
+    🤖 IA
+  </button>
 
 
   <button
@@ -253,6 +260,92 @@ content="#15151A"
 </section>
 
   </main>  <!-- ======================================================
+       MODAL — ASSISTENTE IA
+  ====================================================== -->  <div
+    class="notify-overlay"
+    id="aiModal"
+    style="display:none;"
+  >
+
+    <div
+      class="notify-modal"
+      style="max-width:460px; text-align:left;"
+    >
+
+      <div class="notify-emoji">
+        🤖
+      </div>
+
+      <h3>
+        Assistente CleanSync
+      </h3>
+
+      <p style="margin-bottom:14px;">
+        Pergunte sobre esta limpeza: horário, endereço, checklist, status etc.
+      </p>
+
+      <div
+        id="aiReply"
+        style="
+          min-height:56px;
+          max-height:220px;
+          overflow-y:auto;
+          color:var(--cream);
+          font-size:13.5px;
+          line-height:1.6;
+          white-space:pre-wrap;
+          background:var(--dark2);
+          border:1px solid var(--border);
+          border-radius:var(--radius-sm);
+          padding:12px 14px;
+          margin-bottom:14px;
+        "
+      ></div>
+
+      <textarea
+        id="aiInput"
+        rows="2"
+        maxlength="2000"
+        placeholder="Ex: Quando está marcada minha limpeza?"
+        style="
+          width:100%;
+          padding:12px 14px;
+          border-radius:12px;
+          border:1.5px solid var(--border-strong);
+          background:var(--dark2);
+          color:var(--cream);
+          font-family:var(--sans);
+          font-size:14px;
+          margin-bottom:14px;
+          resize:none;
+          box-sizing:border-box;
+        "
+      ></textarea>
+
+      <div class="notify-actions">
+
+        <button
+          type="button"
+          class="btn btn-accent"
+          id="aiSendBtn"
+          onclick="askAi()"
+        >
+          Perguntar
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-ghost"
+          onclick="closeAiModal()"
+        >
+          Fechar
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>  <!-- ======================================================
        APP COMMON
   ====================================================== -->  <script src="app-common.js?v=11"></script>  <script>
 
@@ -1523,6 +1616,186 @@ content="#15151A"
           false;
 
         input.focus();
+
+      }
+
+    }
+
+
+
+    /* ======================================================
+       ASSISTENTE IA
+       (usa a Edge Function gemini-chat;
+       a chave do Gemini nunca aparece aqui)
+    ====================================================== */
+
+    function openAiModal() {
+
+      const modal =
+        document.getElementById(
+          'aiModal'
+        );
+
+      if (!modal) return;
+
+      modal.style.display =
+        'flex';
+
+      const input =
+        document.getElementById(
+          'aiInput'
+        );
+
+      if (input) {
+
+        setTimeout(
+          () => input.focus(),
+          100
+        );
+
+      }
+
+    }
+
+
+    function closeAiModal() {
+
+      const modal =
+        document.getElementById(
+          'aiModal'
+        );
+
+      if (modal) {
+
+        modal.style.display =
+          'none';
+
+      }
+
+    }
+
+
+    async function askAi() {
+
+      const input =
+        document.getElementById(
+          'aiInput'
+        );
+
+      const replyBox =
+        document.getElementById(
+          'aiReply'
+        );
+
+      const button =
+        document.getElementById(
+          'aiSendBtn'
+        );
+
+
+      if (
+        !input ||
+        !replyBox ||
+        !button
+      ) {
+
+        return;
+
+      }
+
+
+      const message =
+        input.value.trim();
+
+
+      if (!message) {
+
+        return;
+
+      }
+
+
+      if (!cleaningId) {
+
+        showSnackbar(
+          'Limpeza não identificada.'
+        );
+
+        return;
+
+      }
+
+
+      button.disabled =
+        true;
+
+      const originalLabel =
+        button.textContent;
+
+      button.textContent =
+        'Pensando...';
+
+      replyBox.textContent =
+        '';
+
+
+      try {
+
+        const {
+          data,
+          error
+        } =
+          await sb.functions.invoke(
+            'gemini-chat',
+            {
+              body: {
+                taskId: cleaningId,
+                message
+              }
+            }
+          );
+
+
+        if (error) {
+
+          throw error;
+
+        }
+
+
+        replyBox.textContent =
+          (
+            data &&
+            data.reply
+          ) ||
+          'A IA não retornou uma resposta.';
+
+
+      } catch(error) {
+
+        console.error(
+          'askAi:',
+          error
+        );
+
+        /*
+         * O chat humano nunca deve
+         * quebrar por causa da IA.
+         */
+
+        replyBox.textContent =
+          '⚠️ Não foi possível falar com a IA agora. O chat continua funcionando normalmente.';
+
+      } finally {
+
+        button.disabled =
+          false;
+
+        button.textContent =
+          originalLabel;
+
+        input.value =
+          '';
 
       }
 
