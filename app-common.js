@@ -616,3 +616,129 @@ async function sendChatMessage(evt, requestId){
 function watchChatBadgesFor(requestIds){
   requestIds.forEach(id => subscribeChat(id));
 }
+
+/* ============================================================
+   Widget flutuante do assistente de IA (Gemini via Edge Function)
+   ============================================================ */
+let _aiHistory = [];   // [{role:'user'|'assistant', content:'...'}]
+let _aiWidgetBuilt = false;
+
+function setupAIWidget(){
+  if (_aiWidgetBuilt) return;
+  _aiWidgetBuilt = true;
+
+  const btn = document.createElement('button');
+  btn.id = 'aiWidgetButton';
+  btn.setAttribute('aria-label', 'Assistente de IA');
+  btn.style.cssText = `
+    position:fixed; bottom:22px; right:22px; z-index:900; width:56px; height:56px;
+    border-radius:50%; border:none; cursor:pointer; font-size:26px;
+    background:linear-gradient(135deg,var(--wine),var(--pink)); color:#fff;
+    box-shadow:0 10px 30px -8px rgba(196,26,72,.7);
+  `;
+  btn.textContent = '🤖';
+  btn.onclick = toggleAIPanel;
+  document.body.appendChild(btn);
+
+  const panel = document.createElement('div');
+  panel.id = 'aiWidgetPanel';
+  panel.style.cssText = `
+    position:fixed; bottom:88px; right:22px; z-index:900; width:min(360px, calc(100vw - 44px));
+    max-height:min(520px, calc(100vh - 130px)); display:none; flex-direction:column;
+    background:var(--dark3); border:1px solid var(--border-strong); border-radius:var(--radius);
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.75); overflow:hidden;
+  `;
+  panel.innerHTML = `
+    <div style="padding:14px 16px; background:linear-gradient(135deg,var(--wine),var(--pink)); display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-family:var(--display); font-size:18px; font-weight:600; color:#fff;">Assistente CleanSync</div>
+        <div style="font-size:10.5px; color:rgba(255,255,255,.8); font-family:var(--mono); letter-spacing:.05em;">POWERED BY GEMINI</div>
+      </div>
+      <button id="aiWidgetClose" style="background:transparent; border:none; color:#fff; font-size:18px; cursor:pointer; padding:4px 6px;">✕</button>
+    </div>
+    <div id="aiWidgetMessages" style="flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:180px;">
+      <div class="chat-bubble">
+        <div class="chat-bubble-content">Oi! Posso ajudar com dúvidas sobre o app, explicar como funciona a busca de endereço por CEP, ou resumir tarefas concluídas (se você for admin). O que você precisa?</div>
+      </div>
+    </div>
+    <form id="aiWidgetForm" style="display:flex; gap:8px; padding:12px; border-top:1px solid var(--border);">
+      <input type="text" id="aiWidgetInput" placeholder="Pergunte alguma coisa…" autocomplete="off"
+        style="flex:1; padding:10px 12px; border:1.5px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--dark2); color:var(--cream); font-family:var(--sans); font-size:13.5px;">
+      <button type="submit" class="btn btn-accent" style="clip-path:none;">➤</button>
+    </form>
+  `;
+  document.body.appendChild(panel);
+
+  document.getElementById('aiWidgetClose').onclick = toggleAIPanel;
+  document.getElementById('aiWidgetForm').addEventListener('submit', sendAIMessage);
+}
+
+function toggleAIPanel(){
+  const panel = document.getElementById('aiWidgetPanel');
+  if (!panel) return;
+  const isOpen = panel.style.display === 'flex';
+  panel.style.display = isOpen ? 'none' : 'flex';
+  if (!isOpen) document.getElementById('aiWidgetInput').focus();
+}
+
+function addAIBubble(content, mine){
+  const container = document.getElementById('aiWidgetMessages');
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble' + (mine ? ' mine' : '');
+  bubble.innerHTML = `<div class="chat-bubble-content"></div>`;
+  bubble.querySelector('.chat-bubble-content').textContent = content;
+  container.appendChild(bubble);
+  container.scrollTop = container.scrollHeight;
+  return bubble;
+}
+
+async function sendAIMessage(evt){
+  evt.preventDefault();
+  const input = document.getElementById('aiWidgetInput');
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
+  input.disabled = true;
+  addAIBubble(message, true);
+  _aiHistory.push({ role: 'user', content: message });
+
+  const loadingBubble = addAIBubble('Digitando…', false);
+
+  try {
+    const resp = await fetch(SUPABASE_URL + '/functions/v1/gemini-chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ message, history: _aiHistory.slice(0, -1) })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Erro ao falar com o assistente.');
+
+    const reply = data.reply || data.text || data.response || data.message || data.output || JSON.stringify(data);
+    loadingBubble.querySelector('.chat-bubble-content').textContent = reply;
+    _aiHistory.push({ role: 'assistant', content: reply });
+  } catch (err) {
+    loadingBubble.querySelector('.chat-bubble-content').textContent = '⚠️ Não consegui responder agora (' + err.message + ').';
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+/* pra admin: monta um resumo de tarefas concluídas e já manda pro assistente */
+async function askAIResumoTarefas(){
+  setupAIWidget();
+  const panel = document.getElementById('aiWidgetPanel');
+  if (panel.style.display !== 'flex') toggleAIPanel();
+
+  const { data: tasks, error } = await sb.from('cleaning_requests').select('*').eq('status', 'completed').order('completed_at', { ascending: false }).limit(30);
+  if (error) { addAIBubble('Não consegui buscar as tarefas concluídas: ' + error.message, false); return; }
+
+  const resumoDados = tasks.map(t => `${formatDate(t.date)} · ${t.address} · ${t.price} CHF · cliente: ${t.client_name || '—'}`).join('\n');
+  const input = document.getElementById('aiWidgetInput');
+  input.value = 'Gere um resumo em texto corrido das últimas limpezas concluídas, com base nestes dados:\n' + resumoDados;
+  document.getElementById('aiWidgetForm').dispatchEvent(new Event('submit'));
+}
