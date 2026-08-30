@@ -1,977 +1,489 @@
 /* ============================================================
-   CLEANSYNC
-   APP-COMMON.JS — VERSÃO DEFINITIVA (Opção B: login customizado)
-   ============================================================
+   CleanSync — núcleo compartilhado (config, auth, utilitários)
+   Carregado por todas as páginas via <script src="app-common.js">
 
-   Compatível com:
-   - index.html
-   - cliente.html
-   - profissional.html
-   - admin.html
-   - relatorios.html
-   - chat.html
+   Login por USUÁRIO+SENHA própria (tabela "usuarios"), sem
+   depender de confirmação de email. Recuperação de senha por
+   CÓDIGO gerado na criação da conta (guarde-o, não tem outro
+   jeito de recuperar).
 
-   AUTENTICAÇÃO (Opção B — sem Supabase Auth):
-   - usuário + senha (hash sha256 calculado no navegador)
-   - sessão guardada no localStorage via setSession()/getSession()
-   - recuperação por código (não por e-mail)
-   - toda ação sensível verifica usuário+hash a cada chamada,
-     via RPCs SECURITY DEFINER (login_with_password, create_account,
-     reset_password_with_code, k213_admin_*)
+   IMPORTANTE: o cliente do Supabase é guardado na variável "sb"
+   (não "supabase") porque a própria biblioteca carregada pelo
+   <script src=".../supabase-js@2"> já cria uma global chamada
+   "supabase" — usar o mesmo nome de novo quebra a página inteira
+   com "Identifier 'supabase' has already been declared".
+   ============================================================ */
 
-   Banco:
-   profiles (id, username, password_hash, recovery_code_hash, name, role, address)
-   cleaning_requests
-   conversations (task_id, client_id, professional_id)
-   messages (conversation_id, sender_id, content)
-   default_checklist
-
-   NÃO UTILIZA:
-   - sb.auth (Supabase Auth)
-   - auth.uid()
-   - cleaning_id / cleaning_request_id
-============================================================ */
-
-
-/* ============================================================
-   1. CONFIGURAÇÃO SUPABASE
-============================================================ */
-
-const SUPABASE_URL =
-  window.SUPABASE_URL || "";
-
-const SUPABASE_ANON_KEY =
-  window.SUPABASE_ANON_KEY ||
-  window.SUPABASE_KEY ||
-  "";
-
-
-/* ============================================================
-   2. CLIENTE SUPABASE
-============================================================ */
-
-let sb = window.sb || null;
-
-if (!sb) {
-
-  if (typeof window.supabase === "undefined") {
-
-    console.error("CleanSync: biblioteca Supabase não carregada.");
-
-  } else if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        // Opção B não usa Supabase Auth — desliga persistência
-        // de sessão do SDK pra não confundir com nossa sessão própria.
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-      }
-    });
-
-    window.sb = sb;
-
-  } else {
-
-    console.error("CleanSync: SUPABASE_URL ou SUPABASE_ANON_KEY não configurados.");
-
-  }
-
-}
-
-
-/* ============================================================
-   3. APP_CONFIGURED / AVISO DE SETUP
-============================================================ */
-
-const APP_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-window.APP_CONFIGURED = APP_CONFIGURED;
-
-function renderSetupWarning() {
-
-  document.body.innerHTML = `
-    <div class="setup-warning">
-      <h2>⚠️ CleanSync não está configurado</h2>
-      <p>
-        Defina <code>window.SUPABASE_URL</code> e
-        <code>window.SUPABASE_ANON_KEY</code> antes de carregar
-        <code>app-common.js</code>.
-      </p>
-    </div>
-  `;
-
-}
-window.renderSetupWarning = renderSetupWarning;
-
-
-/* ============================================================
-   4. CONFIGURAÇÕES DO SISTEMA
-============================================================ */
+/* ---------- CONFIGURAÇÃO SUPABASE — edite aqui ---------- */
+const SUPABASE_URL = 'https://oyxmrrazgjdnyzhyinhc.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_IVWPCoIWVhkvP_u7J0ZTsA_QeK-MNNI';
 
 const PRICE_BASE = 40;
 const PRICE_WITH_LAUNDRY = 50;
 
-window.PRICE_BASE = PRICE_BASE;
-window.PRICE_WITH_LAUNDRY = PRICE_WITH_LAUNDRY;
+const APP_CONFIGURED = true;
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+let realtimeChannel = null;
+
+/* ---------- aviso de configuração pendente ---------- */
+function renderSetupWarning(){
+  document.body.innerHTML = `
+    <div class="setup-warning">
+      <h2>⚠️ Configuração pendente</h2>
+      <p>Este app ainda não está ligado a um projeto Supabase.</p>
+      <p>Abra <code>app-common.js</code>, encontre <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code> no topo do arquivo, e substitua pelos valores do seu projeto (Settings → API no painel do Supabase).</p>
+    </div>`;
+}
 
 /* ============================================================
-   5. HELPERS
-============================================================ */
+   AUTENTICAÇÃO PRÓPRIA (usuário + senha + código de recuperação)
+   ============================================================ */
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+/* hash SHA-256 da senha — nunca guardamos senha em texto puro */
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-window.escapeHtml = escapeHtml;
 
-function escapeAttribute(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+/* gera um código de recuperação tipo AB3D-9F2K */
+function generateRecoveryCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I pra evitar confusão
+  let code = '';
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code.slice(0, 4) + '-' + code.slice(4);
 }
-window.escapeAttribute = escapeAttribute;
 
-
-/* ============================================================
-   6. DEBOUNCE
-============================================================ */
-
-function debounce(fn, delay = 300) {
-  let timer = null;
-  return function (...args) {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
+/* sessão simples guardada no navegador (não é um JWT, é só local) */
+function getSession(){
+  try { return JSON.parse(localStorage.getItem('k213_session') || 'null'); }
+  catch { return null; }
 }
-window.debounce = debounce;
-
-
-/* ============================================================
-   7. SNACKBAR
-============================================================ */
-
-function showSnackbar(message) {
-
-  const snackbar = document.getElementById("snackbar");
-
-  if (!snackbar) {
-    console.log("[CleanSync]", message);
-    return;
-  }
-
-  snackbar.textContent = message;
-  snackbar.classList.add("show");
-
-  clearTimeout(window.__cleanSyncSnackbarTimer);
-  window.__cleanSyncSnackbarTimer = setTimeout(() => {
-    snackbar.classList.remove("show");
-  }, 3200);
-
+function setSession(obj){
+  localStorage.setItem('k213_session', JSON.stringify(obj));
+  tagOneSignalExternalId(obj.id);
 }
-window.showSnackbar = showSnackbar;
 
-
-/* ============================================================
-   8. HASH DE SENHA (SHA-256, via Web Crypto API do navegador)
-============================================================ */
-
-async function sha256Hex(text) {
-  const data = new TextEncoder().encode(String(text ?? ""));
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-window.sha256Hex = sha256Hex;
-
-
-/* ============================================================
-   9. SESSÃO (localStorage — SEM Supabase Auth)
-============================================================ */
-
-const CLEANSYNC_SESSION_KEY = "cleansync_session";
-
-/*
- * setSession({ id, username, name, role, password_hash, address })
- * Guarda a sessão no localStorage. Chamado depois de login/signup.
- */
-function setSession(sessionData) {
-  try {
-    localStorage.setItem(CLEANSYNC_SESSION_KEY, JSON.stringify(sessionData));
-  } catch (error) {
-    console.error("setSession:", error);
-  }
-}
-window.setSession = setSession;
-
-/*
- * getSession() — SÍNCRONO, sem await.
- * Retorna { id, username, name, role, password_hash, address } ou null.
- */
-function getSession() {
-  try {
-    const raw = localStorage.getItem(CLEANSYNC_SESSION_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (error) {
-    console.error("getSession:", error);
-    return null;
-  }
-}
-window.getSession = getSession;
-
-function clearSession() {
-  try {
-    localStorage.removeItem(CLEANSYNC_SESSION_KEY);
-  } catch (error) {
-    console.error("clearSession:", error);
-  }
-}
-window.clearSession = clearSession;
-
-
-/* ============================================================
-   10. NORMALIZAÇÃO DE ROLE
-============================================================ */
-
-function normalizeRole(role) {
-
-  const value = String(role || "").trim().toLowerCase();
-
-  if (["professional", "profissional", "cleaner", "cleaning"].includes(value)) {
-    return "profissional";
-  }
-
-  if (["admin", "administrator", "administrador"].includes(value)) {
-    return "admin";
-  }
-
-  if (["client", "cliente"].includes(value)) {
-    return "cliente";
-  }
-
-  return value;
-
-}
-window.normalizeRole = normalizeRole;
-
-
-/* ============================================================
-   11. ENTRAR / CRIAR CONTA / RECUPERAR SENHA
-        (wrappers em torno das RPCs SQL)
-============================================================ */
-
-async function entrarComSenha(username, password) {
-
-  if (!sb) throw new Error("Supabase não inicializado.");
-
-  const passwordHash = await sha256Hex(password);
-
-  const { data, error } = await sb.rpc("login_with_password", {
-    p_username: username,
-    p_password_hash: passwordHash
+/* garante que o OneSignal sabe "quem é quem" no navegador (external_id = id da
+   tabela usuarios, que é o mesmo valor usado como client_id em cleaning_requests).
+   Sem isso, a notificação de tarefa concluída não sabe pra quem mandar. */
+function tagOneSignalExternalId(userId){
+  if (!userId || !window.OneSignalDeferred) return;
+  window.OneSignalDeferred.push(function(OneSignal){
+    OneSignal.login(String(userId));
   });
+}
+function clearSession(){
+  localStorage.removeItem('k213_session');
+}
 
-  if (error) {
-    throw new Error(error.message || "Usuário ou senha inválidos.");
-  }
+/* cria conta na tabela "usuarios" */
+async function criarConta(name, username, password, role, address){
+  const password_hash = await sha256Hex(password);
+  const recovery_code = generateRecoveryCode();
 
+  const { data, error } = await sb.rpc('k213_criar_conta', {
+    p_name: name, p_username: username, p_password_hash: password_hash,
+    p_recovery_code: recovery_code, p_role: role, p_address: address || null
+  });
+  if (error) throw new Error(error.message.includes('já existe') ? 'Esse usuário já existe. Escolha outro nome de usuário.' : error.message);
   const row = Array.isArray(data) ? data[0] : data;
-
-  if (!row) {
-    throw new Error("Usuário ou senha inválidos.");
-  }
-
-  return row; // { id, username, name, role, address }
-
+  return { user: row, recovery_code: row.recovery_code };
 }
-window.entrarComSenha = entrarComSenha;
 
-
-async function criarConta(name, username, password, role, address) {
-
-  if (!sb) throw new Error("Supabase não inicializado.");
-
-  const passwordHash = await sha256Hex(password);
-
-  const { data, error } = await sb.rpc("create_account", {
-    p_name: name,
-    p_username: username,
-    p_password_hash: passwordHash,
-    p_role: role,
-    p_address: address || null
-  });
-
-  if (error) {
-    throw new Error(error.message || "Não foi possível criar a conta.");
-  }
-
+/* login por usuário + senha */
+async function entrarComSenha(username, password){
+  const password_hash = await sha256Hex(password);
+  const { data, error } = await sb.rpc('k213_login', { p_username: username, p_password_hash: password_hash });
+  if (error) throw error;
   const row = Array.isArray(data) ? data[0] : data;
-
-  if (!row) {
-    throw new Error("Não foi possível criar a conta.");
-  }
-
-  return {
-    user: {
-      id: row.id,
-      username: row.username,
-      name: row.name,
-      role: row.role,
-      address: row.address
-    },
-    recovery_code: row.recovery_code
-  };
-
+  if (!row) throw new Error('Usuário ou senha incorretos.');
+  return row;
 }
-window.criarConta = criarConta;
 
-
-async function redefinirSenha(username, code, newPassword) {
-
-  if (!sb) throw new Error("Supabase não inicializado.");
-
-  const newPasswordHash = await sha256Hex(newPassword);
-
-  const { data, error } = await sb.rpc("reset_password_with_code", {
-    p_username: username,
-    p_code: code,
-    p_new_password_hash: newPasswordHash
+/* redefine a senha usando o código de recuperação, e gera um código novo */
+async function redefinirSenha(username, recoveryCode, newPassword){
+  const newHash = await sha256Hex(newPassword);
+  const newCode = generateRecoveryCode();
+  const { data, error } = await sb.rpc('k213_redefinir_senha', {
+    p_username: username, p_recovery_code: recoveryCode.toUpperCase(),
+    p_new_password_hash: newHash, p_new_recovery_code: newCode
   });
-
-  if (error) {
-    throw new Error(error.message || "Usuário ou código de recuperação inválidos.");
-  }
-
-  return data; // novo código de recuperação
-
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || !row.ok) throw new Error('Usuário ou código de recuperação incorretos.');
+  return newCode;
 }
-window.redefinirSenha = redefinirSenha;
 
-
-/* ============================================================
-   12. REQUIRE ROLE (agora baseado na sessão local, não no Supabase Auth)
-============================================================ */
-
-async function requireRole(expectedRole) {
-
+/* ---------- guarda de rota ----------
+   Chame no topo de cliente.html / profissional.html / relatorios.html.
+   Se não estiver logado -> manda para index.html.
+   Se o papel não bater -> manda para a página certa dele. */
+async function requireRole(requiredRole){
+  if (!APP_CONFIGURED) { renderSetupWarning(); return null; }
   const session = getSession();
-
-  if (!session || !session.id) {
-    window.location.href = "index.html";
+  if (!session) { window.location.href = 'index.html'; return null; }
+  // admin pode ver qualquer página; as outras páginas exigem o papel exato
+  if (session.role !== requiredRole && session.role !== 'admin') {
+    window.location.href = session.role === 'admin' ? 'admin.html' : session.role === 'profissional' ? 'profissional.html' : 'cliente.html';
     return null;
   }
+  paintWho({ name: session.name, role: session.role });
+  tagOneSignalExternalId(session.id);
+  return {
+    user: { id: session.id, email: session.username },
+    profile: { name: session.name, role: session.role }
+  };
+}
 
-  const actualRole = normalizeRole(session.role);
-  const wantedRole = normalizeRole(expectedRole);
+function paintWho(profile){
+  const nameEl = document.getElementById('topWhoName');
+  if (nameEl) nameEl.textContent = profile.name + ' · ' + (profile.role === 'admin' ? 'Administrador' : profile.role === 'profissional' ? 'Profissional' : 'Cliente');
+  const adminLink = document.getElementById('navAdminLink');
+  if (adminLink && profile.role === 'admin') adminLink.style.display = '';
+}
 
-  /*
-   * ADMIN possui acesso às áreas administrativas/profissionais.
-   */
-  const allowed =
-    actualRole === wantedRole ||
-    (actualRole === "admin" && (wantedRole === "profissional" || wantedRole === "admin"));
-
-  if (!allowed) {
-
-    if (actualRole === "cliente") {
-      window.location.href = "cliente.html";
-    } else if (actualRole === "profissional" || actualRole === "admin") {
-      window.location.href = "profissional.html";
-    } else {
-      window.location.href = "index.html";
-    }
-
-    return null;
-
+function logout(){
+  if (realtimeChannel && sb) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (window.OneSignalDeferred) {
+    window.OneSignalDeferred.push(function(OneSignal){ OneSignal.logout(); });
   }
-
-  const profile = {
-    id: session.id,
-    name: session.name,
-    role: session.role,
-    username: session.username,
-    address: session.address
-  };
-
-  const user = {
-    id: session.id,
-    username: session.username
-  };
-
-  updateTopWhoName(profile, user);
-
-  return { user, profile };
-
-}
-window.requireRole = requireRole;
-
-
-/* ============================================================
-   13. NOME NO TOPO
-============================================================ */
-
-function updateTopWhoName(profile, user) {
-
-  const element = document.getElementById("topWhoName");
-  if (!element) return;
-
-  element.textContent =
-    (profile && profile.name) ||
-    (user && user.username) ||
-    "";
-
-}
-window.updateTopWhoName = updateTopWhoName;
-
-
-/* ============================================================
-   14. LOGOUT
-============================================================ */
-
-function logout() {
   clearSession();
-  window.location.href = "index.html";
-}
-window.logout = logout;
-
-
-/* ============================================================
-   15. STATUS
-============================================================ */
-
-function formatStatus(status) {
-  switch (status) {
-    case "pending": return "Pendente";
-    case "in-progress": return "Em andamento";
-    case "completed": return "Concluída";
-    case "cancelled": return "Cancelada";
-    default: return status || "—";
-  }
-}
-window.formatStatus = formatStatus;
-
-
-/* ============================================================
-   16. DATA
-============================================================ */
-
-function formatTaskDate(date, time) {
-
-  if (!date) return "—";
-
-  try {
-
-    const raw = date + (time ? "T" + time : "T00:00:00");
-    const d = new Date(raw);
-
-    if (Number.isNaN(d.getTime())) return escapeHtml(date);
-
-    const formatted = d.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric"
-    });
-
-    return time ? formatted + " · " + escapeHtml(time) : formatted;
-
-  } catch {
-    return escapeHtml(date);
-  }
-
-}
-window.formatTaskDate = formatTaskDate;
-
-
-/* ============================================================
-   17. GET DEFAULT CHECKLIST
-============================================================ */
-
-async function getDefaultChecklist() {
-
-  if (!sb) return [];
-
-  try {
-
-    const { data, error } = await sb
-      .from("default_checklist")
-      .select("*")
-      .eq("id", 1)
-      .single();
-
-    if (error) {
-      console.warn("Checklist padrão não encontrado:", error.message);
-      return [];
-    }
-
-    if (Array.isArray(data?.items)) return data.items;
-
-    return [];
-
-  } catch (error) {
-    console.error("getDefaultChecklist:", error);
-    return [];
-  }
-
-}
-window.getDefaultChecklist = getDefaultChecklist;
-
-
-/* ============================================================
-   18. CHECKLIST NORMALIZATION
-============================================================ */
-
-function normalizeChecklist(checklist) {
-
-  if (!Array.isArray(checklist)) return [];
-
-  return checklist.map((item, index) => ({
-    id: item?.id || "item_" + index,
-    label: item?.label || item?.name || "Tarefa",
-    done: Boolean(item?.done)
-  }));
-
-}
-window.normalizeChecklist = normalizeChecklist;
-
-
-/* ============================================================
-   19. TIMER
-============================================================ */
-
-function calculateWorkSeconds(task) {
-
-  if (!task?.work_start) return 0;
-
-  const start = new Date(task.work_start).getTime();
-  if (Number.isNaN(start)) return 0;
-
-  const end = task.work_end ? new Date(task.work_end).getTime() : Date.now();
-
-  return Math.max(0, Math.floor((end - start) / 1000));
-
+  window.location.href = 'index.html';
 }
 
-function formatDuration(totalSeconds) {
-
-  const seconds = Math.max(0, Number(totalSeconds) || 0);
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-
-  if (h > 0) {
-    return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-  }
-
-  return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-
+/* ---------- sincronização em tempo real ----------
+   onChange(payload) é chamado a cada INSERT/UPDATE/DELETE em
+   cleaning_requests. Cada página decide o que recarregar. */
+function startRealtime(onChange){
+  if (realtimeChannel || !sb) return;
+  realtimeChannel = sb
+    .channel('cleaning_requests_sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'cleaning_requests' }, onChange)
+    .subscribe();
 }
 
-window.calculateWorkSeconds = calculateWorkSeconds;
-window.formatDuration = formatDuration;
-
-
-/* ============================================================
-   20. ATTACH TIMERS
-============================================================ */
-
-function attachTimers(tasks) {
-
-  if (!Array.isArray(tasks)) return;
-
-  const update = () => {
-    tasks.forEach(task => {
-      const element = document.querySelector(`[data-timer-id="${escapeAttribute(task.id)}"]`);
-      if (!element) return;
-      element.textContent = formatDuration(calculateWorkSeconds(task));
-    });
+/* ---------- debounce ----------
+   Evita recarregar a lista duas vezes seguidas quando uma ação
+   do usuário e o evento de tempo real chegam quase juntos. */
+function debounce(fn, wait = 250){
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
   };
-
-  update();
-
-  clearInterval(window.__cleanSyncTimerInterval);
-  window.__cleanSyncTimerInterval = setInterval(update, 1000);
-
 }
-window.attachTimers = attachTimers;
 
+/* ---------- instalar app (barra fixa) + ativar notificações (modal central) ----------
+   Os navegadores escondem esses avisos de propósito e demoram a mostrar.
+   Aqui a gente assume o controle: o convite pra instalar fica fixo
+   numa barrinha discreta, e o pedido de notificação aparece como um
+   cartão no meio da tela, já com o botão de permitir bem visível. */
+function setupInstallAndNotifyBanner(){
+  let deferredInstallPrompt = null;
+  let showInstall = false;
+  let showNotifyModal = false;
 
-/* ============================================================
-   21. CHAT — URL E BOTÃO
-============================================================ */
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    showInstall = true;
+    renderInstallBanner();
+  });
+  window.addEventListener('appinstalled', () => {
+    showInstall = false;
+    renderInstallBanner();
+    showSnackbar('🎉 App instalado! Já pode acessar direto da tela inicial.');
+  });
 
-function getChatUrl(taskId) {
-  if (!taskId) return "chat.html";
-  return "chat.html?task=" + encodeURIComponent(taskId);
+  // se o app já roda instalado (modo standalone), não tem por que oferecer instalar
+  if (window.matchMedia('(display-mode: standalone)').matches) showInstall = false;
+
+  // não insiste com quem já respondeu (aceitou/negou) ou já dispensou nesta sessão
+  const notifyDismissedThisSession = sessionStorage.getItem('cleansync_notify_dismissed') === '1';
+  if ('Notification' in window && Notification.permission === 'default' && !notifyDismissedThisSession) {
+    showNotifyModal = true;
+  }
+
+  /* ---------- barra fixa de instalação (persiste até instalar ou fechar) ---------- */
+  function renderInstallBanner(){
+    let el = document.getElementById('installBanner');
+    if (!showInstall) { if (el) el.remove(); return; }
+    if (el) return; // já está na tela, não precisa recriar
+
+    el = document.createElement('div');
+    el.id = 'installBanner';
+    el.className = 'install-banner';
+    el.innerHTML = `
+      <span class="install-banner-icon">📲</span>
+      <div class="install-banner-text">
+        <strong>Instale o CleanSync</strong>
+        <span>Acesso rápido direto da tela inicial, sem precisar abrir o navegador ✨</span>
+      </div>
+      <button class="btn btn-accent btn-sm" id="btnInstallApp">Instalar</button>
+      <button class="install-banner-close" id="btnDismissInstall" aria-label="Fechar">✕</button>
+    `;
+    document.body.appendChild(el);
+
+    document.getElementById('btnInstallApp').onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      showInstall = false;
+      renderInstallBanner();
+    };
+    document.getElementById('btnDismissInstall').onclick = () => {
+      showInstall = false;
+      renderInstallBanner();
+    };
+  }
+
+  /* ---------- modal central de notificações ---------- */
+  function renderNotifyModal(){
+    let el = document.getElementById('notifyOverlay');
+    if (!showNotifyModal) { if (el) el.remove(); return; }
+    if (el) return;
+
+    el = document.createElement('div');
+    el.id = 'notifyOverlay';
+    el.className = 'notify-overlay';
+    el.innerHTML = `
+      <div class="notify-modal">
+        <div class="notify-emoji">🔔</div>
+        <h3>Não perca nenhuma novidade!</h3>
+        <p>Ative as notificações e saiba na hora quando uma tarefa for criada, iniciada ou concluída. 🧹✨</p>
+        <div class="notify-actions">
+          <button class="btn btn-accent" id="btnActivateNotify">✅ Permitir notificações</button>
+          <button class="btn btn-ghost" id="btnDismissNotify">Agora não</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(el);
+
+    document.getElementById('btnActivateNotify').onclick = () => {
+      if (window.OneSignalDeferred) {
+        window.OneSignalDeferred.push(function(OneSignal){ OneSignal.Slidedown.promptPush(); });
+      }
+      showNotifyModal = false;
+      renderNotifyModal();
+    };
+    document.getElementById('btnDismissNotify').onclick = () => {
+      sessionStorage.setItem('cleansync_notify_dismissed', '1');
+      showNotifyModal = false;
+      renderNotifyModal();
+    };
+  }
+
+  renderInstallBanner();
+  // o evento beforeinstallprompt pode chegar um instante depois do load
+  setTimeout(renderInstallBanner, 800);
+
+  // um pequeno respiro antes do modal de notificação aparecer, pra não
+  // assustar a pessoa assim que a página termina de carregar
+  if (showNotifyModal) setTimeout(renderNotifyModal, 1000);
 }
-window.getChatUrl = getChatUrl;
 
-function renderChatButton(task) {
 
-  if (!task?.id) return "";
+/* ---------- snackbar ---------- */
+function showSnackbar(msg){
+  let el = document.getElementById('snackbar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'snackbar';
+    el.className = 'snackbar';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
+}
+
+/* ---------- utilitários de formatação ---------- */
+function formatDate(dateString){
+  if (!dateString) return '';
+  const d = new Date(dateString + 'T00:00:00');
+  return d.toLocaleDateString('pt-BR');
+}
+function getElapsedTime(startIso){
+  const elapsed = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
+  return formatDuration(elapsed);
+}
+function formatDuration(totalSeconds){
+  totalSeconds = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return h > 0 ? `${h}h ${m}min ${s}s` : `${m}min ${s}s`;
+}
+function escapeHtml(str){
+  if (str == null) return '';
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- checklist padrão ---------- */
+async function getDefaultChecklist(){
+  const { data, error } = await sb.from('default_checklist').select('items').eq('id', 1).single();
+  if (error || !data) return [];
+  return data.items;
+}
+
+/* ---------- cronômetros ativos na tela ---------- */
+const _activeTimerKeys = new Set();
+function attachTimers(list){
+  list.forEach(req => {
+    if (req.status === 'in-progress' && req.work_start) {
+      const start = req.work_start;
+      const key = 'timer_' + req.id + '_' + start;
+      if (_activeTimerKeys.has(key)) return;
+      _activeTimerKeys.add(key);
+      setInterval(() => {
+        document.querySelectorAll(`[data-timer-start="${start}"]`).forEach(el => {
+          el.textContent = getElapsedTime(start);
+        });
+      }, 1000);
+    }
+  });
+}
+
+/* ---------- ações exclusivas do administrador ----------
+   Mexem direto na tabela cleaning_requests (mesma tabela que
+   cliente/profissional já usam), então dependem das mesmas
+   políticas de RLS que já permitem escrita nessa tabela.
+   Depois de agir, tenta recarregar a tela chamando a função de
+   reload da própria página (reloadTasks em profissional.html,
+   reloadRequests em cliente.html) — o que existir no escopo global. */
+function _adminReload(){
+  if (typeof reloadTasks === 'function') reloadTasks();
+  else if (typeof reloadRequests === 'function') reloadRequests();
+}
+
+async function adminEditPrice(id, currentPrice){
+  const input = prompt('Novo valor (em CHF):', currentPrice);
+  if (input === null) return;
+  const parsed = parseFloat(String(input).replace(',', '.'));
+  if (isNaN(parsed) || parsed < 0) return alert('Digite um valor numérico válido.');
+
+  const { error } = await sb.from('cleaning_requests').update({ price: parsed }).eq('id', id);
+  if (error) return alert('Erro ao atualizar valor: ' + error.message);
+  showSnackbar('💰 Valor atualizado para ' + parsed + ' CHF!');
+  _adminReload();
+}
+
+async function adminDeleteTask(id, label){
+  if (!confirm(`Excluir permanentemente a tarefa "${label}"? Isso não pode ser desfeito.`)) return;
+
+  const { error } = await sb.from('cleaning_requests').delete().eq('id', id);
+  if (error) return alert('Erro ao excluir: ' + error.message);
+  showSnackbar('🗑️ Tarefa excluída.');
+  _adminReload();
+}
+
+/* ---------- cartão de tarefa (compartilhado entre cliente/profissional) ---------- */
+function renderTaskCard(req, mode){
+  let timerHtml = '';
+  if (req.status === 'in-progress' && req.work_start) {
+    timerHtml = `<div class="timer-box">
+      <div class="timer-display" data-timer-start="${req.work_start}">${getElapsedTime(req.work_start)}</div>
+      ${mode === 'cleaner' || mode === 'admin'
+        ? `<div class="timer-controls"><button class="btn btn-danger btn-lg" onclick="stopTimer('${req.id}')">⏹ Finalizar trabalho</button></div>`
+        : `<p style="font-size:12.5px; color:var(--info); margin-top:8px;">Trabalho em andamento…</p>`}
+    </div>`;
+  } else if (req.status === 'pending' && (mode === 'cleaner' || mode === 'admin')) {
+    timerHtml = `<div class="timer-box">
+      <p style="font-size:12.5px; color:var(--muted); margin-bottom:12px;">Aguardando início do trabalho</p>
+      <div class="timer-controls"><button class="btn btn-success btn-lg" onclick="startTimer('${req.id}')">▶ Iniciar trabalho</button></div>
+    </div>`;
+  } else if (req.work_end && req.work_start) {
+    const duration = (new Date(req.work_end) - new Date(req.work_start)) / 1000;
+    timerHtml = `<p style="color:var(--success); margin-top:10px; font-size:13px; font-weight:600;">⏱️ Tempo total: ${formatDuration(duration)}</p>`;
+  }
+
+  let photosHtml = '';
+  if (req.photos && req.photos.length) {
+    photosHtml = `<div class="photo-row">${req.photos.map(p => `<img src="${p}" alt="foto" onclick="window.open('${p}','_blank')">`).join('')}</div>`;
+  }
+
+  let checklistHtml = '';
+  if (mode === 'cleaner' || mode === 'admin') {
+    const total = (req.checklist || []).length;
+    const done = (req.checklist || []).filter(i => i.done).length;
+    checklistHtml = total ? `
+      <div class="checklist">
+        <h4>Checklist</h4>
+        <div class="checklist-progress">${done} / ${total} concluídos</div>
+        ${req.checklist.map(item => {
+          const isLaundry = item.id === 'laundry' || item.label.includes('Lavagem de roupa');
+          return `<div class="checklist-item ${isLaundry ? 'laundry-item' : ''} ${item.done ? 'done' : ''}">
+            <input type="checkbox" id="ck_${item.id}_${req.id}" ${item.done ? 'checked' : ''} onchange="toggleChecklistItem('${req.id}', '${item.id}')">
+            <label for="ck_${item.id}_${req.id}">${escapeHtml(item.label)}</label>
+            ${isLaundry ? '<span class="plus">+10 CHF</span>' : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="field">
+        <label>Fotos (opcional)</label>
+        <input type="file" accept="image/*" multiple onchange="uploadPhotos('${req.id}', this)">
+      </div>
+      ${photosHtml}
+    ` : '';
+  }
+
+  let actionsHtml = '';
+  let editFormHtml = '';
+  if (mode === 'client' && req.status === 'pending') {
+    actionsHtml = `<div class="task-actions">
+      <button class="btn btn-outline" onclick="toggleEditForm('${req.id}')">Editar</button>
+      <button class="btn btn-danger" onclick="cancelRequest('${req.id}')">Cancelar</button>
+    </div>`;
+    editFormHtml = `<div class="task-edit-form" id="editForm_${req.id}" style="display:none;">
+      <div class="field-row">
+        <div class="field"><label>Data</label><input type="date" id="editDate_${req.id}" value="${req.date || ''}"></div>
+        <div class="field"><label>Horário</label><input type="time" id="editTime_${req.id}" value="${req.time ? req.time.slice(0,5) : ''}"></div>
+      </div>
+      <div class="edit-actions">
+        <button class="btn btn-outline" onclick="toggleEditForm('${req.id}')">Cancelar</button>
+        <button class="btn btn-accent" onclick="saveEditRequest('${req.id}')">Salvar alterações</button>
+      </div>
+    </div>`;
+  }
+  if ((mode === 'cleaner' || mode === 'admin') && req.status !== 'completed') {
+    actionsHtml += `<div class="task-actions"><button class="btn btn-success" onclick="completeTask('${req.id}')">✅ Marcar como concluída</button></div>`;
+  }
+  if (mode === 'admin') {
+    actionsHtml += `<div class="task-actions">
+      <button class="btn btn-outline" onclick="adminEditPrice('${req.id}', ${Number(req.price) || 0})">💰 Editar valor</button>
+      <button class="btn btn-danger" onclick="adminDeleteTask('${req.id}', '${escapeHtml(req.ref_code || req.address || '')}')">🗑️ Excluir tarefa</button>
+    </div>`;
+  }
+
+  const statusLabel = req.status === 'pending' ? 'Pendente' : req.status === 'in-progress' ? 'Em andamento' : 'Concluída';
 
   return `
-    <a
-      href="${escapeAttribute(getChatUrl(task.id))}"
-      class="btn btn-outline chat-task-button"
-      title="Abrir conversa desta limpeza"
-      aria-label="Abrir chat desta limpeza"
-    >
-      💬 Chat
-    </a>
-  `;
-
+  <div class="task ${req.status}">
+    <div class="task-top">
+      <div>
+        <div class="task-ref">${req.ref_code || ''}</div>
+        <div class="task-addr">${escapeHtml(req.address)}</div>
+      </div>
+      <div class="task-badges">
+        <span class="badge price ${req.laundry_service ? 'laundry' : ''}">${req.price} CHF</span>
+        <span class="badge ${req.status}">${statusLabel}</span>
+      </div>
+    </div>
+    <div class="task-info">
+      <div class="info-item"><div class="label">Data</div><div class="value">${formatDate(req.date)}</div></div>
+      <div class="info-item"><div class="label">Horário</div><div class="value">${req.time ? req.time.slice(0,5) : ''}</div></div>
+      <div class="info-item"><div class="label">Estadia</div><div class="value">${req.stay_duration} dias</div></div>
+      <div class="info-item"><div class="label">Hóspedes</div><div class="value">${req.guest_count}</div></div>
+      <div class="info-item"><div class="label">Lavagem</div><div class="value">${req.laundry_service ? '✅ Sim' : '❌ Não'}</div></div>
+      ${(mode === 'cleaner' || mode === 'admin') ? `<div class="info-item"><div class="label">Cliente</div><div class="value">${escapeHtml(req.client_name)}</div></div>` : ''}
+    </div>
+    ${req.notes ? `<div class="task-notes"><strong>Obs:</strong> ${escapeHtml(req.notes)}</div>` : ''}
+    ${timerHtml}
+    ${checklistHtml}
+    ${mode === 'client' ? photosHtml : ''}
+    ${actionsHtml}
+    ${editFormHtml}
+  </div>`;
 }
-window.renderChatButton = renderChatButton;
-
-
-/* ============================================================
-   22. RENDER TASK CARD
-============================================================ */
-
-function renderTaskCard(task, mode = "client") {
-
-  if (!task) return "";
-
-  const role = normalizeRole(mode);
-  const isClient = role === "cliente" || mode === "client";
-  const isAdmin = role === "admin" || mode === "admin";
-  const isCleaner = role === "profissional" || mode === "cleaner" || mode === "professional";
-
-  const checklist = normalizeChecklist(task.checklist);
-  const doneCount = checklist.filter(item => item.done).length;
-  const checklistTotal = checklist.length;
-  const checklistPercent = checklistTotal > 0 ? Math.round((doneCount / checklistTotal) * 100) : 0;
-
-  const laundry = Boolean(task.laundry_service);
-  const price = Number(task.price ?? (laundry ? PRICE_WITH_LAUNDRY : PRICE_BASE));
-  const status = task.status || "pending";
-  const taskId = task.id;
-
-  const ref = task.ref_code || (taskId ? String(taskId).slice(0, 8) : "—");
-  const clientName = task.client_name || task.client_email || "Cliente";
-  const address = task.address || "Endereço não informado";
-  const date = formatTaskDate(task.date, task.time);
-  const notes = task.notes || "";
-  const photos = Array.isArray(task.photos) ? task.photos : [];
-
-  let html = `
-    <article class="task card" data-task-id="${escapeAttribute(taskId)}">
-      <div class="task-head">
-        <div>
-          <div class="task-ref">#${escapeHtml(ref)}</div>
-          <h3 class="task-title">${escapeHtml(clientName)}</h3>
-        </div>
-        <div class="status status-${escapeAttribute(status)}">
-          ${escapeHtml(formatStatus(status))}
-        </div>
-      </div>
-
-      <div class="task-meta">
-        <div class="task-meta-item"><span>DATA</span><strong>${date}</strong></div>
-        <div class="task-meta-item"><span>ENDEREÇO</span><strong>${escapeHtml(address)}</strong></div>
-        <div class="task-meta-item"><span>HÓSPEDES</span><strong>${escapeHtml(task.guest_count ?? "—")}</strong></div>
-        <div class="task-meta-item"><span>ESTADIA</span><strong>${escapeHtml(task.stay_duration ?? "—")}${task.stay_duration ? " dias" : ""}</strong></div>
-      </div>
-
-      <div class="task-price-row">
-        <div>
-          <span class="task-label">SERVIÇO</span>
-          <strong>Limpeza${laundry ? " + Lavagem" : ""}</strong>
-        </div>
-        <div class="task-price">${price}<small>CHF</small></div>
-      </div>
-  `;
-
-  if (checklistTotal > 0) {
-    html += `
-      <div class="checklist-section">
-        <div class="checklist-header">
-          <span>Checklist</span>
-          <span class="checklist-progress">${doneCount} / ${checklistTotal} concluídos</span>
-        </div>
-        <div class="checklist-bar" aria-hidden="true">
-          <div class="checklist-fill" style="width:${checklistPercent}%"></div>
-        </div>
-        <div class="checklist-list">
-          ${checklist.map(item => {
-            const done = Boolean(item.done);
-            const checkboxId = "ck_" + String(item.id) + "_" + String(taskId);
-            return `
-              <label class="checklist-item ${done ? "done" : ""}">
-                <input
-                  type="checkbox"
-                  id="${escapeAttribute(checkboxId)}"
-                  ${done ? "checked" : ""}
-                  ${(isCleaner || isAdmin)
-                    ? `onclick="toggleChecklistItem('${escapeAttribute(taskId)}','${escapeAttribute(item.id)}')"`
-                    : "disabled"}
-                >
-                <span>${escapeHtml(item.label)}</span>
-              </label>
-            `;
-          }).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  if (notes) {
-    html += `
-      <div class="task-notes">
-        <span>OBSERVAÇÕES</span>
-        <p>${escapeHtml(notes)}</p>
-      </div>
-    `;
-  }
-
-  if (isCleaner || isAdmin) {
-    html += `
-      <div class="task-timer">
-        <div>
-          <span>TEMPO DE TRABALHO</span>
-          <strong data-timer-id="${escapeAttribute(taskId)}">${formatDuration(calculateWorkSeconds(task))}</strong>
-        </div>
-        ${task.work_start && !task.work_end ? `<span class="timer-live">● CONTANDO</span>` : ""}
-      </div>
-    `;
-  }
-
-  if (photos.length > 0) {
-    html += `
-      <div class="task-photos">
-        <div class="task-label">FOTOS</div>
-        <div class="photo-grid">
-          ${photos.map(photo => `
-            <a href="${escapeAttribute(photo)}" target="_blank" rel="noopener noreferrer">
-              <img src="${escapeAttribute(photo)}" alt="Foto da limpeza" loading="lazy">
-            </a>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  }
-
-  html += `<div class="task-actions">${renderChatButton(task)}`;
-
-  if (isClient) {
-
-    if (status === "pending") {
-      html += `
-        <button type="button" class="btn btn-outline" onclick="toggleEditForm('${escapeAttribute(taskId)}')">✏️ Editar</button>
-        <button type="button" class="btn btn-danger" onclick="cancelRequest('${escapeAttribute(taskId)}')">🗑️ Cancelar</button>
-      `;
-    }
-
-    html += `
-      <div class="edit-form" id="editForm_${escapeAttribute(taskId)}" style="display:none;">
-        <div class="field-row">
-          <div class="field">
-            <label>Nova data</label>
-            <input type="date" id="editDate_${escapeAttribute(taskId)}" value="${escapeAttribute(task.date || "")}">
-          </div>
-          <div class="field">
-            <label>Novo horário</label>
-            <input type="time" id="editTime_${escapeAttribute(taskId)}" value="${escapeAttribute(task.time || "")}">
-          </div>
-        </div>
-        <button type="button" class="btn btn-accent" onclick="saveEditRequest('${escapeAttribute(taskId)}')">Salvar alteração</button>
-      </div>
-    `;
-
-  }
-
-  if (isCleaner || isAdmin) {
-
-    if (status === "pending") {
-      html += `<button type="button" class="btn btn-accent" onclick="startTimer('${escapeAttribute(taskId)}')">▶️ Iniciar trabalho</button>`;
-    }
-
-    if (status === "in-progress") {
-      html += `
-        <button type="button" class="btn btn-outline" onclick="stopTimer('${escapeAttribute(taskId)}')">⏹️ Finalizar trabalho</button>
-        <button type="button" class="btn btn-accent" onclick="completeTask('${escapeAttribute(taskId)}')">✅ Concluir tarefa</button>
-      `;
-    }
-
-    if (status === "completed") {
-      html += `<span class="task-completed-label">✓ Serviço concluído</span>`;
-    }
-
-    html += `
-      <label class="btn btn-outline photo-upload-button">
-        📸 Fotos
-        <input type="file" accept="image/*" multiple hidden onchange="uploadPhotos('${escapeAttribute(taskId)}', this)">
-      </label>
-    `;
-
-  }
-
-  if (isAdmin) {
-    html += `<button type="button" class="btn btn-danger" onclick="deleteTask('${escapeAttribute(taskId)}')">🗑️ Excluir</button>`;
-  }
-
-  html += `</div></article>`;
-
-  return html;
-
-}
-window.renderTaskCard = renderTaskCard;
-
-
-/* ============================================================
-   23. DELETE TASK — ADMIN
-============================================================ */
-
-async function deleteTask(id) {
-
-  if (!id) return;
-  if (!confirm("Tem certeza que deseja excluir esta tarefa?\n\nEssa ação não poderá ser desfeita.")) return;
-  if (!sb) { alert("Supabase não está disponível."); return; }
-
-  try {
-
-    const { error } = await sb.from("cleaning_requests").delete().eq("id", id);
-    if (error) throw error;
-
-    showSnackbar("🗑️ Tarefa excluída.");
-
-    if (typeof window.reloadTasks === "function") window.reloadTasks();
-    if (typeof window.reloadRequests === "function") window.reloadRequests();
-
-  } catch (error) {
-    console.error("deleteTask:", error);
-    alert("Erro ao excluir tarefa: " + error.message);
-  }
-
-}
-window.deleteTask = deleteTask;
-
-
-/* ============================================================
-   24. REALTIME CLEANING REQUESTS
-============================================================ */
-
-let cleanSyncRealtimeChannel = null;
-
-function startRealtime(callback) {
-
-  if (!sb) {
-    console.warn("Realtime: Supabase não inicializado.");
-    return null;
-  }
-
-  if (cleanSyncRealtimeChannel) {
-    try { sb.removeChannel(cleanSyncRealtimeChannel); } catch {}
-    cleanSyncRealtimeChannel = null;
-  }
-
-  const channelName = "cleansync-cleaning-requests-" + Date.now();
-
-  cleanSyncRealtimeChannel = sb
-    .channel(channelName)
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "cleaning_requests" },
-      payload => {
-        console.log("CleanSync Realtime:", payload);
-        if (typeof callback === "function") callback(payload);
-      }
-    )
-    .subscribe(status => {
-      console.log("CleanSync Realtime status:", status);
-    });
-
-  return cleanSyncRealtimeChannel;
-
-}
-window.startRealtime = startRealtime;
-
-
-/* ============================================================
-   25. STOP REALTIME
-============================================================ */
-
-function stopRealtime() {
-  if (!sb || !cleanSyncRealtimeChannel) return;
-  try { sb.removeChannel(cleanSyncRealtimeChannel); } catch {}
-  cleanSyncRealtimeChannel = null;
-}
-window.stopRealtime = stopRealtime;
-
-
-/* ============================================================
-   26. INSTALL / NOTIFICATION BANNER
-============================================================ */
-
-function setupInstallAndNotifyBanner() {
-
-  let deferredPrompt = null;
-
-  window.addEventListener("beforeinstallprompt", event => {
-    event.preventDefault();
-    deferredPrompt = event;
-    window.__cleanSyncInstallPrompt = deferredPrompt;
-  });
-
-  window.addEventListener("appinstalled", () => {
-    deferredPrompt = null;
-    window.__cleanSyncInstallPrompt = null;
-  });
-
-}
-window.setupInstallAndNotifyBanner = setupInstallAndNotifyBanner;
-
-
-/* ============================================================
-   27. SERVICE WORKER
-============================================================ */
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("service-worker.js")
-      .then(registration => {
-        console.log("CleanSync Service Worker:", registration.scope);
-      })
-      .catch(error => {
-        console.warn("Service Worker:", error);
-      });
-  });
-}
-
-
-/* ============================================================
-   28. CLEANUP
-============================================================ */
-
-window.addEventListener("beforeunload", () => {
-
-  if (cleanSyncRealtimeChannel && sb) {
-    try { sb.removeChannel(cleanSyncRealtimeChannel); } catch {}
-  }
-
-  if (window.__cleanSyncTimerInterval) {
-    clearInterval(window.__cleanSyncTimerInterval);
-  }
-
-});
-
-
-/* ============================================================
-   29. DEBUG
-============================================================ */
-
-console.log("%cCleanSync App Common carregado (Opção B — login customizado)", "font-weight:bold");
-console.log("Chat:", "chat.html?task=ID");
-console.log("Tabela de conversas:", "conversations.task_id");
-console.log("Tabela de mensagens:", "messages.conversation_id");
-console.log("Sessão local:", CLEANSYNC_SESSION_KEY);
