@@ -380,7 +380,28 @@ async function adminDeleteTask(id, label){
 }
 
 /* ---------- cartão de tarefa (compartilhado entre cliente/profissional) ---------- */
+/* rótulo em português pro status de uma tarefa (usado em vários lugares) */
+function statusLabel(status){
+  return status === 'pending' ? 'Pendente' : status === 'in-progress' ? 'Em andamento' : 'Concluída';
+}
+
 function renderTaskCard(req, mode){
+  if (mode === 'preview') {
+    const dataFmt = (req.date || '').split('-').reverse().join('/');
+    return `<div class="task ${req.status}" style="padding:16px 18px; margin-bottom:10px;">
+      <div class="task-top" style="padding-bottom:0; margin-bottom:0; border-bottom:none;">
+        <div>
+          <div class="task-ref">${dataFmt} · ${req.time || ''}</div>
+          <div class="task-addr" style="font-size:17px;">${escapeHtml(req.address)}</div>
+        </div>
+        <div class="task-badges">
+          <span class="badge ${req.status}">${statusLabel(req.status)}</span>
+          <span class="badge price">${req.price} CHF</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
   let timerHtml = '';
   if (req.status === 'in-progress' && req.work_start) {
     timerHtml = `<div class="timer-box">
@@ -457,8 +478,6 @@ function renderTaskCard(req, mode){
     </div>`;
   }
 
-  const statusLabel = req.status === 'pending' ? 'Pendente' : req.status === 'in-progress' ? 'Em andamento' : 'Concluída';
-
   return `
   <div class="task ${req.status}">
     <div class="task-top">
@@ -468,7 +487,7 @@ function renderTaskCard(req, mode){
       </div>
       <div class="task-badges">
         <span class="badge price ${req.laundry_service ? 'laundry' : ''}">${req.price} CHF</span>
-        <span class="badge ${req.status}">${statusLabel}</span>
+        <span class="badge ${req.status}">${statusLabel(req.status)}</span>
       </div>
     </div>
     <div class="task-info">
