@@ -1,0 +1,75 @@
+// supabase/functions/notify-client-on-complete/index.ts
+//
+// Disparada por um Database Webhook do Supabase sempre que a tabela
+// cleaning_requests sofre um UPDATE. Se o status virou "completed"
+// (e antes não era), manda um push pro cliente daquela tarefa via OneSignal.
+//
+// O client_id da tarefa é usado como external_id do OneSignal — por isso
+// é essencial que o front chame OneSignal.login(client_id) no momento do
+// login (isso é feito em outro passo, no app-common.js).
+
+Deno.serve(async (req) => {
+  try {
+    const payload = await req.json();
+
+    // payload do Database Webhook do Supabase tem esse formato:
+    // { type: "UPDATE", table: "cleaning_requests", schema: "public", record: {...}, old_record: {...} }
+    const { table, schema, record, old_record } = payload;
+
+    // garante que essa function só age em eventos da tabela certa
+    // (útil se no futuro você reaproveitar essa mesma function pra outro webhook)
+    if (table !== "cleaning_requests" || (schema && schema !== "public")) {
+      return new Response(JSON.stringify({ skipped: "evento de outra tabela/schema" }), { status: 200 });
+    }
+
+    if (!record || record.status !== "completed") {
+      return new Response(JSON.stringify({ skipped: "status não é completed" }), { status: 200 });
+    }
+    if (old_record && old_record.status === "completed") {
+      return new Response(JSON.stringify({ skipped: "já estava completed antes" }), { status: 200 });
+    }
+    if (!record.client_id) {
+      return new Response(JSON.stringify({ skipped: "sem client_id" }), { status: 200 });
+    }
+
+    const ONESIGNAL_APP_ID = Deno.env.get("ONESIGNAL_APP_ID");
+    const ONESIGNAL_REST_API_KEY = Deno.env.get("ONESIGNAL_REST_API_KEY");
+
+    if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
+      return new Response(JSON.stringify({ error: "secrets do OneSignal não configurados" }), { status: 500 });
+    }
+
+    const endereco = record.address || "seu endereço";
+
+    const oneSignalResp = await fetch("https://api.onesignal.com/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Key ${ONESIGNAL_REST_API_KEY}`,
+      },
+      body: JSON.stringify({
+        app_id: ONESIGNAL_APP_ID,
+        target_channel: "push",
+        include_aliases: { external_id: [String(record.client_id)] },
+        headings: { en: "✅ Limpeza concluída!" },
+        contents: { en: `🧹 Sua limpeza em ${endereco} foi concluída! Dá uma olhada nas fotos e no checklist no seu painel. ✨` },
+      }),
+    });
+
+    const result = await oneSignalResp.json();
+
+    if (!oneSignalResp.ok) {
+      return new Response(JSON.stringify({ sent: false, status: oneSignalResp.status, oneSignal: result }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ sent: true, oneSignal: result }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+  }
+});
