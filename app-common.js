@@ -620,7 +620,6 @@ function watchChatBadgesFor(requestIds){
 /* ============================================================
    Widget flutuante do assistente de IA (Gemini via Edge Function)
    ============================================================ */
-let _aiHistory = [];   // [{role:'user'|'assistant', content:'...'}]
 let _aiWidgetBuilt = false;
 
 function setupAIWidget(){
@@ -692,15 +691,16 @@ function addAIBubble(content, mine){
   return bubble;
 }
 
-async function sendAIMessage(evt){
+async function sendAIMessage(evt, taskId){
   evt.preventDefault();
-  const input = document.getElementById('aiWidgetInput');
+  const form = evt.target;
+  const input = form.querySelector('input[type=text]') || document.getElementById('aiWidgetInput');
   const message = input.value.trim();
   if (!message) return;
+  const session = getSession();
   input.value = '';
   input.disabled = true;
   addAIBubble(message, true);
-  _aiHistory.push({ role: 'user', content: message });
 
   const loadingBubble = addAIBubble('Digitando…', false);
 
@@ -712,14 +712,18 @@ async function sendAIMessage(evt){
         'apikey': SUPABASE_ANON_KEY,
         'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
       },
-      body: JSON.stringify({ message, history: _aiHistory.slice(0, -1) })
+      body: JSON.stringify({
+        message,
+        taskId: taskId || null,
+        username: session.username,
+        passwordHash: session.password_hash
+      })
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || 'Erro ao falar com o assistente.');
 
-    const reply = data.reply || data.text || data.response || data.message || data.output || JSON.stringify(data);
+    const reply = data.reply || 'Não consegui gerar uma resposta no momento.';
     loadingBubble.querySelector('.chat-bubble-content').textContent = reply;
-    _aiHistory.push({ role: 'assistant', content: reply });
   } catch (err) {
     loadingBubble.querySelector('.chat-bubble-content').textContent = '⚠️ Não consegui responder agora (' + err.message + ').';
   } finally {
@@ -728,17 +732,13 @@ async function sendAIMessage(evt){
   }
 }
 
-/* pra admin: monta um resumo de tarefas concluídas e já manda pro assistente */
+/* pra admin: pergunta pelo faturamento/resumo do mês (a function já monta os dados sozinha em modo geral) */
 async function askAIResumoTarefas(){
   setupAIWidget();
   const panel = document.getElementById('aiWidgetPanel');
   if (panel.style.display !== 'flex') toggleAIPanel();
 
-  const { data: tasks, error } = await sb.from('cleaning_requests').select('*').eq('status', 'completed').order('completed_at', { ascending: false }).limit(30);
-  if (error) { addAIBubble('Não consegui buscar as tarefas concluídas: ' + error.message, false); return; }
-
-  const resumoDados = tasks.map(t => `${formatDate(t.date)} · ${t.address} · ${t.price} CHF · cliente: ${t.client_name || '—'}`).join('\n');
   const input = document.getElementById('aiWidgetInput');
-  input.value = 'Gere um resumo em texto corrido das últimas limpezas concluídas, com base nestes dados:\n' + resumoDados;
+  input.value = 'Me dê um resumo em texto corrido do faturamento e das tarefas deste mês.';
   document.getElementById('aiWidgetForm').dispatchEvent(new Event('submit'));
 }
