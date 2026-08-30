@@ -1,119 +1,165 @@
 /* ============================================================
-   CLEANSYNC — APP COMMON
-   VERSÃO DEFINITIVA
+   CLEANSYNC
+   APP-COMMON.JS — VERSÃO DEFINITIVA
    ============================================================
 
    Compatível com:
+   - index.html
+   - cliente.html
+   - profissional.html
+   - admin.html
+   - relatorios.html
+   - chat.html
 
-   cliente.html
-   profissional.html
-   admin.html
-   chat.html
-
-   Supabase:
+   Banco:
    cleaning_requests
    conversations
    messages
-   default_checklist
    profiles
+   default_checklist
 
-   Conversations:
-   id
-   task_id
-   client_id
-   professional_id
-   created_at
-   updated_at
+   CHAT:
+   conversations.task_id
+   conversations.client_id
+   conversations.professional_id
 
-   Messages:
-   id
-   conversation_id
-   sender_id
-   content
-   created_at
+   messages.conversation_id
+   messages.sender_id
+   messages.content
 
-   IMPORTANTE:
-   - O relacionamento do chat usa conversations.task_id
-   - NÃO usa cleaning_id
-   - NÃO usa cleaning_request_id
+   NÃO UTILIZA:
+   cleaning_id
+   cleaning_request_id
 ============================================================ */
 
 
 /* ============================================================
-   SUPABASE
+   1. CONFIGURAÇÃO SUPABASE
 ============================================================ */
+
+/*
+ * Se você já define essas variáveis em outro arquivo,
+ * mantenha a sua configuração original.
+ *
+ * Exemplo:
+ *
+ * window.SUPABASE_URL = "https://xxxx.supabase.co";
+ * window.SUPABASE_ANON_KEY = "eyJ...";
+ */
 
 const SUPABASE_URL =
   window.SUPABASE_URL ||
-  'COLOQUE_AQUI_SUA_SUPABASE_URL';
+  "";
 
 const SUPABASE_ANON_KEY =
   window.SUPABASE_ANON_KEY ||
-  'COLOQUE_AQUI_SUA_SUPABASE_ANON_KEY';
+  window.SUPABASE_KEY ||
+  "";
 
 
-if (!window.supabase) {
+/* ============================================================
+   2. CLIENTE SUPABASE
+============================================================ */
 
-  console.error(
-    'Supabase JS não foi carregado.'
-  );
-
-}
+let sb = window.sb || null;
 
 
-let sb = null;
-
-
-try {
+if (!sb) {
 
   if (
-    window.supabase &&
-    typeof window.supabase.createClient === 'function'
+    typeof window.supabase === "undefined"
   ) {
 
-    sb = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
+    console.error(
+      "CleanSync: biblioteca Supabase não carregada."
+    );
+
+  }
+
+  else if (
+    SUPABASE_URL &&
+    SUPABASE_ANON_KEY
+  ) {
+
+    sb =
+      window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+        {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+          }
+        }
+      );
+
+    window.sb = sb;
+
+  }
+
+  else {
+
+    console.error(
+      "CleanSync: SUPABASE_URL ou SUPABASE_ANON_KEY não configurados."
     );
 
   }
 
 }
-catch (error) {
 
-  console.error(
-    'Erro ao inicializar Supabase:',
-    error
-  );
+
+/* ============================================================
+   3. CONFIGURAÇÕES DO SISTEMA
+============================================================ */
+
+const PRICE_BASE = 40;
+const PRICE_WITH_LAUNDRY = 50;
+
+window.PRICE_BASE = PRICE_BASE;
+window.PRICE_WITH_LAUNDRY = PRICE_WITH_LAUNDRY;
+
+
+/* ============================================================
+   4. HELPERS
+============================================================ */
+
+function escapeHtml(value) {
+
+  return String(
+    value ?? ""
+  )
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
 }
 
 
-/* ============================================================
-   CONFIGURAÇÕES
-============================================================ */
-
-const PRICE_BASE = 40;
-
-const PRICE_WITH_LAUNDRY = 50;
-
-const CLEANING_PHOTOS_BUCKET =
-  'cleaning-photos';
+window.escapeHtml = escapeHtml;
 
 
-/* ============================================================
-   ESTADO GLOBAL
-============================================================ */
+function escapeAttribute(value) {
 
-window.CleanSync =
-  window.CleanSync || {};
+  return String(
+    value ?? ""
+  )
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 
-window.CleanSync.supabase =
-  sb;
+}
+
+
+window.escapeAttribute =
+  escapeAttribute;
 
 
 /* ============================================================
-   HELPERS
+   5. DEBOUNCE
 ============================================================ */
 
 function debounce(
@@ -137,121 +183,24 @@ function debounce(
 }
 
 
-function escapeHtml(value) {
-
-  if (
-    value === null ||
-    value === undefined
-  ) {
-
-    return '';
-
-  }
-
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-
-}
-
-
-function escapeAttr(value) {
-
-  return escapeHtml(value);
-
-}
-
-
-function formatDate(value) {
-
-  if (!value) {
-
-    return '—';
-
-  }
-
-  const raw =
-    String(value);
-
-  const date =
-    new Date(
-      raw.length === 10
-        ? raw + 'T00:00:00'
-        : raw
-    );
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-
-    return escapeHtml(
-      raw
-    );
-
-  }
-
-  return date.toLocaleDateString(
-    'pt-BR'
-  );
-
-}
-
-
-function formatTime(value) {
-
-  if (!value) {
-
-    return '—';
-
-  }
-
-  return String(value)
-    .slice(0, 5);
-
-}
-
-
-function formatCHF(value) {
-
-  const number =
-    Number(value || 0);
-
-  return number.toLocaleString(
-    'pt-BR',
-    {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    }
-  ) + ' CHF';
-
-}
+window.debounce = debounce;
 
 
 /* ============================================================
-   SNACKBAR
+   6. SNACKBAR
 ============================================================ */
 
-let snackbarTimer = null;
-
-
-function showSnackbar(
-  message,
-  duration = 3200
-) {
+function showSnackbar(message) {
 
   const snackbar =
     document.getElementById(
-      'snackbar'
+      "snackbar"
     );
 
   if (!snackbar) {
 
     console.log(
+      "[CleanSync]",
       message
     );
 
@@ -259,115 +208,117 @@ function showSnackbar(
 
   }
 
+
   snackbar.textContent =
     message;
 
   snackbar.classList.add(
-    'show'
+    "show"
   );
+
 
   clearTimeout(
-    snackbarTimer
+    window.__cleanSyncSnackbarTimer
   );
 
-  snackbarTimer =
+
+  window.__cleanSyncSnackbarTimer =
     setTimeout(
       () => {
 
         snackbar.classList.remove(
-          'show'
+          "show"
         );
 
       },
-      duration
+      3200
     );
 
 }
 
 
+window.showSnackbar =
+  showSnackbar;
+
+
 /* ============================================================
-   SESSÃO
+   7. SESSÃO
 ============================================================ */
 
-function getSession() {
+async function getSession() {
 
   try {
 
-    const raw =
-      sessionStorage.getItem(
-        'cleansync_session'
-      );
+    if (!sb) {
 
-    if (raw) {
-
-      return JSON.parse(
-        raw
-      );
+      return {
+        session: null,
+        user: null
+      };
 
     }
 
+
+    const {
+      data,
+      error
+    } =
+      await sb.auth.getSession();
+
+
+    if (error) {
+
+      console.error(
+        "getSession:",
+        error
+      );
+
+      return {
+        session: null,
+        user: null
+      };
+
+    }
+
+
+    const session =
+      data?.session || null;
+
+
+    return {
+
+      session,
+
+      user:
+        session?.user || null
+
+    };
+
   }
+
   catch (error) {
 
-    console.warn(
-      'Erro ao ler sessão:',
+    console.error(
+      "getSession:",
       error
     );
 
-  }
+    return {
+      session: null,
+      user: null
+    };
 
-  return {};
+  }
 
 }
 
 
-function saveSession(data) {
-
-  try {
-
-    sessionStorage.setItem(
-      'cleansync_session',
-      JSON.stringify(
-        data || {}
-      )
-    );
-
-  }
-  catch (error) {
-
-    console.warn(
-      'Não foi possível salvar sessão:',
-      error
-    );
-
-  }
-
-}
-
-
-function clearSession() {
-
-  try {
-
-    sessionStorage.removeItem(
-      'cleansync_session'
-    );
-
-  }
-  catch (error) {
-
-    console.warn(
-      'Erro ao limpar sessão:',
-      error
-    );
-
-  }
-
-}
+window.getSession =
+  getSession;
 
 
 /* ============================================================
-   PERFIL
+   8. PERFIL
 ============================================================ */
 
 async function getCurrentProfile(
@@ -380,22 +331,22 @@ async function getCurrentProfile(
 
   }
 
+
   const {
     data,
     error
-  } = await sb
-    .from('profiles')
-    .select('*')
-    .eq(
-      'id',
-      userId
-    )
-    .maybeSingle();
+  } =
+    await sb
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
 
   if (error) {
 
     console.error(
-      'Erro ao buscar perfil:',
+      "Erro ao carregar perfil:",
       error
     );
 
@@ -403,295 +354,239 @@ async function getCurrentProfile(
 
   }
 
-  return data || null;
+
+  return data;
 
 }
 
 
-function getProfileName(
-  profile,
-  user
-) {
-
-  if (profile) {
-
-    return (
-      profile.full_name ||
-      profile.name ||
-      profile.display_name ||
-      profile.username ||
-      ''
-    );
-
-  }
-
-  return (
-    user?.email ||
-    ''
-  );
-
-}
+window.getCurrentProfile =
+  getCurrentProfile;
 
 
 /* ============================================================
-   AUTENTICAÇÃO
+   9. NORMALIZAÇÃO DE ROLE
+============================================================ */
+
+function normalizeRole(role) {
+
+  const value =
+    String(
+      role || ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  if (
+    value === "professional" ||
+    value === "profissional" ||
+    value === "cleaner" ||
+    value === "cleaning"
+  ) {
+
+    return "profissional";
+
+  }
+
+
+  if (
+    value === "admin" ||
+    value === "administrator" ||
+    value === "administrador"
+  ) {
+
+    return "admin";
+
+  }
+
+
+  if (
+    value === "client" ||
+    value === "cliente"
+  ) {
+
+    return "cliente";
+
+  }
+
+
+  return value;
+
+}
+
+
+window.normalizeRole =
+  normalizeRole;
+
+
+/* ============================================================
+   10. REQUIRE ROLE
 ============================================================ */
 
 async function requireRole(
-  requiredRole = null
+  expectedRole
 ) {
-
-  if (!sb) {
-
-    showSnackbar(
-      'Erro: Supabase não configurado.'
-    );
-
-    return null;
-
-  }
-
-  const {
-    data,
-    error
-  } = await sb.auth.getSession();
-
-  if (
-    error ||
-    !data ||
-    !data.session
-  ) {
-
-    window.location.href =
-      'index.html';
-
-    return null;
-
-  }
-
-  const user =
-    data.session.user;
-
-  const profile =
-    await getCurrentProfile(
-      user.id
-    );
-
-  if (!profile) {
-
-    console.error(
-      'Perfil não encontrado.'
-    );
-
-    showSnackbar(
-      'Perfil do usuário não encontrado.'
-    );
-
-    await sb.auth.signOut();
-
-    window.location.href =
-      'index.html';
-
-    return null;
-
-  }
-
-  const role =
-    profile.role;
-
-  let authorized = true;
-
-  if (requiredRole) {
-
-    if (
-      requiredRole === 'profissional'
-    ) {
-
-      authorized =
-        role === 'profissional' ||
-        role === 'admin';
-
-    }
-    else if (
-      requiredRole === 'cliente'
-    ) {
-
-      authorized =
-        role === 'cliente';
-
-    }
-    else if (
-      requiredRole === 'admin'
-    ) {
-
-      authorized =
-        role === 'admin';
-
-    }
-    else {
-
-      authorized =
-        role === requiredRole;
-
-    }
-
-  }
-
-  if (!authorized) {
-
-    if (
-      role === 'cliente'
-    ) {
-
-      window.location.href =
-        'cliente.html';
-
-    }
-    else if (
-      role === 'profissional'
-    ) {
-
-      window.location.href =
-        'profissional.html';
-
-    }
-    else if (
-      role === 'admin'
-    ) {
-
-      /*
-       * Admin pode acessar páginas
-       * administrativas/profissionais.
-       */
-
-      if (
-        requiredRole === 'cliente'
-      ) {
-
-        window.location.href =
-          'profissional.html';
-
-      }
-      else {
-
-        window.location.href =
-          'admin.html';
-
-      }
-
-    }
-    else {
-
-      window.location.href =
-        'index.html';
-
-    }
-
-    return null;
-
-  }
-
-  saveSession({
-
-    user_id:
-      user.id,
-
-    email:
-      user.email,
-
-    role:
-      role,
-
-    name:
-      getProfileName(
-        profile,
-        user
-      ),
-
-    address:
-      profile.address ||
-      ''
-
-  });
-
-  const topName =
-    document.getElementById(
-      'topWhoName'
-    );
-
-  if (topName) {
-
-    topName.textContent =
-      getProfileName(
-        profile,
-        user
-      ) ||
-      user.email ||
-      '';
-
-  }
-
-  const adminLink =
-    document.getElementById(
-      'navAdminLink'
-    );
-
-  if (adminLink) {
-
-    adminLink.style.display =
-      role === 'admin'
-        ? ''
-        : 'none';
-
-  }
-
-  return {
-
-    user,
-    profile
-
-  };
-
-}
-
-
-/* ============================================================
-   USUÁRIO ATUAL
-============================================================ */
-
-async function getCurrentUser() {
-
-  if (!sb) {
-
-    return null;
-
-  }
 
   try {
 
-    const {
-      data,
-      error
-    } = await sb.auth.getUser();
+    if (!sb) {
 
-    if (
-      error ||
-      !data?.user
-    ) {
+      console.error(
+        "Supabase não inicializado."
+      );
+
+      window.location.href =
+        "index.html";
 
       return null;
 
     }
 
-    return data.user;
+
+    const {
+      data,
+      error
+    } =
+      await sb.auth.getSession();
+
+
+    if (
+      error ||
+      !data ||
+      !data.session ||
+      !data.session.user
+    ) {
+
+      window.location.href =
+        "index.html";
+
+      return null;
+
+    }
+
+
+    const user =
+      data.session.user;
+
+
+    const {
+      data: profile,
+      error: profileError
+    } =
+      await sb
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+
+    if (
+      profileError ||
+      !profile
+    ) {
+
+      console.error(
+        "Perfil não encontrado:",
+        profileError
+      );
+
+      alert(
+        "Seu perfil não foi encontrado."
+      );
+
+      window.location.href =
+        "index.html";
+
+      return null;
+
+    }
+
+
+    const actualRole =
+      normalizeRole(
+        profile.role
+      );
+
+
+    const wantedRole =
+      normalizeRole(
+        expectedRole
+      );
+
+
+    /*
+     * ADMIN possui acesso às áreas
+     * administrativas/profissionais.
+     */
+
+    const allowed =
+      actualRole === wantedRole ||
+      (
+        actualRole === "admin" &&
+        (
+          wantedRole === "profissional" ||
+          wantedRole === "admin"
+        )
+      );
+
+
+    if (!allowed) {
+
+      if (
+        actualRole === "cliente"
+      ) {
+
+        window.location.href =
+          "cliente.html";
+
+      }
+
+      else if (
+        actualRole === "profissional" ||
+        actualRole === "admin"
+      ) {
+
+        window.location.href =
+          "profissional.html";
+
+      }
+
+      else {
+
+        window.location.href =
+          "index.html";
+
+      }
+
+
+      return null;
+
+    }
+
+
+    updateTopWhoName(
+      profile,
+      user
+    );
+
+
+    return {
+      user,
+      profile
+    };
 
   }
+
   catch (error) {
 
-    console.warn(
-      'Erro ao obter usuário:',
+    console.error(
+      "requireRole:",
       error
     );
+
+    window.location.href =
+      "index.html";
 
     return null;
 
@@ -700,8 +595,43 @@ async function getCurrentUser() {
 }
 
 
+window.requireRole =
+  requireRole;
+
+
 /* ============================================================
-   LOGOUT
+   11. NOME NO TOPO
+============================================================ */
+
+function updateTopWhoName(
+  profile,
+  user
+) {
+
+  const element =
+    document.getElementById(
+      "topWhoName"
+    );
+
+
+  if (!element) return;
+
+
+  element.textContent =
+    profile?.name ||
+    profile?.full_name ||
+    user?.email ||
+    "";
+
+}
+
+
+window.updateTopWhoName =
+  updateTopWhoName;
+
+
+/* ============================================================
+   12. LOGOUT
 ============================================================ */
 
 async function logout() {
@@ -715,197 +645,204 @@ async function logout() {
     }
 
   }
+
   catch (error) {
 
     console.error(
-      'Erro ao sair:',
+      "Erro ao sair:",
       error
     );
 
   }
 
-  clearSession();
 
   window.location.href =
-    'index.html';
+    "index.html";
 
 }
 
 
+window.logout =
+  logout;
+
+
 /* ============================================================
-   CHECKLIST PADRÃO
+   13. STATUS
 ============================================================ */
 
-const FALLBACK_CHECKLIST = [
+function formatStatus(status) {
 
-  {
-    id: 'entrance',
-    label: 'Verificar entrada e acesso'
-  },
+  switch (status) {
 
-  {
-    id: 'living',
-    label: 'Limpar sala e áreas comuns'
-  },
+    case "pending":
+      return "Pendente";
 
-  {
-    id: 'kitchen',
-    label: 'Limpar cozinha'
-  },
+    case "in-progress":
+      return "Em andamento";
 
-  {
-    id: 'bathroom',
-    label: 'Limpar banheiro'
-  },
+    case "completed":
+      return "Concluída";
 
-  {
-    id: 'bedrooms',
-    label: 'Organizar quartos'
-  },
+    case "cancelled":
+      return "Cancelada";
 
-  {
-    id: 'floor',
-    label: 'Limpar pisos'
-  },
+    default:
+      return status || "—";
 
-  {
-    id: 'trash',
-    label: 'Retirar lixo'
-  },
-
-  {
-    id: 'laundry',
-    label: 'Lavagem de roupa'
   }
 
-];
+}
 
+
+window.formatStatus =
+  formatStatus;
+
+
+/* ============================================================
+   14. DATA
+============================================================ */
+
+function formatTaskDate(
+  date,
+  time
+) {
+
+  if (!date) {
+
+    return "—";
+
+  }
+
+
+  try {
+
+    const raw =
+      date +
+      (
+        time
+          ? "T" + time
+          : "T00:00:00"
+      );
+
+
+    const d =
+      new Date(raw);
+
+
+    if (
+      Number.isNaN(
+        d.getTime()
+      )
+    ) {
+
+      return escapeHtml(date);
+
+    }
+
+
+    const formatted =
+      d.toLocaleDateString(
+        "pt-BR",
+        {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric"
+        }
+      );
+
+
+    return time
+      ? formatted +
+        " · " +
+        escapeHtml(time)
+      : formatted;
+
+  }
+
+  catch {
+
+    return escapeHtml(date);
+
+  }
+
+}
+
+
+window.formatTaskDate =
+  formatTaskDate;
+
+
+/* ============================================================
+   15. GET DEFAULT CHECKLIST
+============================================================ */
 
 async function getDefaultChecklist() {
 
   if (!sb) {
 
-    return FALLBACK_CHECKLIST.map(
-      item => ({
-        ...item
-      })
-    );
+    return [];
 
   }
+
 
   try {
 
     const {
       data,
       error
-    } = await sb
-      .from('default_checklist')
-      .select('items')
-      .eq(
-        'id',
-        1
-      )
-      .maybeSingle();
+    } =
+      await sb
+        .from("default_checklist")
+        .select("*")
+        .eq("id", 1)
+        .single();
+
+
+    if (error) {
+
+      console.warn(
+        "Checklist padrão não encontrado:",
+        error.message
+      );
+
+      return [];
+
+    }
+
 
     if (
-      !error &&
-      data &&
-      Array.isArray(
-        data.items
-      )
+      Array.isArray(data?.items)
     ) {
 
       return data.items;
 
     }
 
+
+    return [];
+
   }
+
   catch (error) {
 
-    console.warn(
-      'Erro no checklist padrão:',
+    console.error(
+      "getDefaultChecklist:",
       error
     );
 
+    return [];
+
   }
 
-  return FALLBACK_CHECKLIST.map(
-    item => ({
-      ...item
-    })
-  );
-
 }
+
+
+window.getDefaultChecklist =
+  getDefaultChecklist;
 
 
 /* ============================================================
-   STATUS
-============================================================ */
-
-function getStatusLabel(
-  status
-) {
-
-  const labels = {
-
-    pending:
-      'Pendente',
-
-    'in-progress':
-      'Em andamento',
-
-    completed:
-      'Concluída',
-
-    cancelled:
-      'Cancelada'
-
-  };
-
-  return (
-    labels[status] ||
-    status ||
-    'Pendente'
-  );
-
-}
-
-
-function getStatusClass(
-  status
-) {
-
-  if (
-    status === 'completed'
-  ) {
-
-    return 'completed';
-
-  }
-
-  if (
-    status === 'in-progress'
-  ) {
-
-    return 'in-progress';
-
-  }
-
-  if (
-    status === 'cancelled'
-  ) {
-
-    return 'cancelled';
-
-  }
-
-  return 'pending';
-
-}
-
-
-/* ============================================================
-   CHECKLIST HELPERS
+   16. CHECKLIST NORMALIZATION
 ============================================================ */
 
 function normalizeChecklist(
@@ -913,26 +850,25 @@ function normalizeChecklist(
 ) {
 
   if (
-    !Array.isArray(
-      checklist
-    )
+    !Array.isArray(checklist)
   ) {
 
     return [];
 
   }
 
+
   return checklist.map(
     (item, index) => ({
 
       id:
         item?.id ||
-        `item_${index}`,
+        "item_" + index,
 
       label:
         item?.label ||
         item?.name ||
-        `Tarefa ${index + 1}`,
+        "Tarefa",
 
       done:
         Boolean(
@@ -945,2433 +881,60 @@ function normalizeChecklist(
 }
 
 
-function getChecklistProgress(
-  checklist
-) {
-
-  const items =
-    normalizeChecklist(
-      checklist
-    );
-
-  const total =
-    items.length;
-
-  const done =
-    items.filter(
-      item => item.done
-    ).length;
-
-  return {
-
-    total,
-    done,
-
-    percent:
-      total
-        ? Math.round(
-            done / total * 100
-          )
-        : 0
-
-  };
-
-}
+window.normalizeChecklist =
+  normalizeChecklist;
 
 
 /* ============================================================
-   RENDER TASK CARD
+   17. TIMER
 ============================================================ */
 
-function renderTaskCard(
-  task,
-  mode = 'client'
-) {
-
-  if (!task) {
-
-    return '';
-
-  }
-
-  const status =
-    task.status ||
-    'pending';
-
-  const statusLabel =
-    getStatusLabel(
-      status
-    );
-
-  const statusClass =
-    getStatusClass(
-      status
-    );
-
-  const checklist =
-    normalizeChecklist(
-      task.checklist
-    );
-
-  const progress =
-    getChecklistProgress(
-      checklist
-    );
-
-  const isAdmin =
-    mode === 'admin';
-
-  const isCleaner =
-    mode === 'cleaner' ||
-    mode === 'professional' ||
-    mode === 'profissional';
-
-  const isClient =
-    mode === 'client' ||
-    mode === 'cliente';
-
-  const photos =
-    Array.isArray(
-      task.photos
-    )
-      ? task.photos
-      : [];
-
-  const refCode =
-    task.ref_code ||
-    'LIMPEZA';
-
-  const clientName =
-    task.client_name ||
-    'Cliente';
-
-  const professionalName =
-    task.professional_name ||
-    '';
-
-  const price =
-    task.price !== null &&
-    task.price !== undefined
-      ? task.price
-      : (
-          task.laundry_service
-            ? PRICE_WITH_LAUNDRY
-            : PRICE_BASE
-        );
-
-  return `
-
-    <div
-      class="task card"
-      data-task-id="${escapeAttr(task.id)}"
-    >
-
-      <div class="task-head">
-
-        <div>
-
-          <div class="task-ref">
-            ${escapeHtml(refCode)}
-          </div>
-
-          <h3 class="task-title">
-            ${escapeHtml(
-              task.address ||
-              'Endereço não informado'
-            )}
-          </h3>
-
-        </div>
-
-        <span
-          class="status status-${escapeAttr(statusClass)}"
-        >
-          ${escapeHtml(statusLabel)}
-        </span>
-
-      </div>
-
-
-      <div class="task-meta">
-
-        <div>
-          <strong>📅 Data</strong>
-          <span>
-            ${escapeHtml(
-              formatDate(task.date)
-            )}
-          </span>
-        </div>
-
-        <div>
-          <strong>🕐 Horário</strong>
-          <span>
-            ${escapeHtml(
-              formatTime(task.time)
-            )}
-          </span>
-        </div>
-
-        <div>
-          <strong>💰 Valor</strong>
-          <span>
-            ${escapeHtml(
-              formatCHF(price)
-            )}
-          </span>
-        </div>
-
-        <div>
-          <strong>👥 Hóspedes</strong>
-          <span>
-            ${escapeHtml(
-              task.guest_count || '—'
-            )}
-          </span>
-        </div>
-
-      </div>
-
-
-      <div class="task-info">
-
-        ${
-          task.stay_duration
-            ? `
-              <span>
-                🏠 Estadia:
-                ${escapeHtml(
-                  task.stay_duration
-                )} dias
-              </span>
-            `
-            : ''
-        }
-
-        ${
-          task.laundry_service
-            ? `
-              <span>
-                🧺 Lavagem incluída
-              </span>
-            `
-            : ''
-        }
-
-        ${
-          professionalName
-            ? `
-              <span>
-                👤 Profissional:
-                ${escapeHtml(
-                  professionalName
-                )}
-              </span>
-            `
-            : ''
-        }
-
-      </div>
-
-
-      ${
-        isCleaner || isAdmin
-          ? `
-            <div class="task-client">
-
-              <strong>
-                Cliente
-              </strong>
-
-              <span>
-                ${escapeHtml(
-                  clientName
-                )}
-              </span>
-
-            </div>
-          `
-          : ''
-      }
-
-
-      <div class="checklist-header">
-
-        <strong>
-          Checklist
-        </strong>
-
-        <span class="checklist-progress">
-          ${progress.done} / ${progress.total}
-          concluídos
-        </span>
-
-      </div>
-
-
-      <div class="checklist">
-
-        ${
-          checklist.length
-            ? checklist.map(
-                item => {
-
-                  const checked =
-                    item.done
-                      ? 'checked'
-                      : '';
-
-                  return `
-
-                    <label
-                      class="checklist-item ${
-                        item.done
-                          ? 'done'
-                          : ''
-                      }"
-                    >
-
-                      ${
-                        isCleaner ||
-                        isAdmin
-                          ? `
-                            <input
-                              type="checkbox"
-                              id="ck_${escapeAttr(
-                                item.id
-                              )}_${escapeAttr(
-                                task.id
-                              )}"
-                              ${checked}
-                              onchange="
-                                toggleChecklistItem(
-                                  '${escapeAttr(
-                                    task.id
-                                  )}',
-                                  '${escapeAttr(
-                                    item.id
-                                  )}'
-                                )
-                              "
-                            >
-                          `
-                          : `
-                            <input
-                              type="checkbox"
-                              ${checked}
-                              disabled
-                            >
-                          `
-                      }
-
-                      <span>
-                        ${escapeHtml(
-                          item.label
-                        )}
-                      </span>
-
-                    </label>
-
-                  `;
-
-                }
-              ).join('')
-            : `
-              <div class="empty-small">
-                Nenhum item no checklist.
-              </div>
-            `
-        }
-
-      </div>
-
-
-      ${
-        task.notes
-          ? `
-            <div class="task-notes">
-
-              <strong>
-                📝 Observações
-              </strong>
-
-              <p>
-                ${escapeHtml(
-                  task.notes
-                )}
-              </p>
-
-            </div>
-          `
-          : ''
-      }
-
-
-      ${
-        task.work_start
-          ? `
-            <div class="timer-box">
-
-              <div>
-
-                <span class="timer-label">
-                  ⏱️ Tempo de trabalho
-                </span>
-
-                <strong
-                  class="live-timer"
-                  data-start="${escapeAttr(
-                    task.work_start
-                  )}"
-                  ${
-                    task.work_end
-                      ? `
-                        data-end="${escapeAttr(
-                          task.work_end
-                        )}"
-                      `
-                      : ''
-                  }
-                >
-                  00:00:00
-                </strong>
-
-              </div>
-
-            </div>
-          `
-          : ''
-      }
-
-
-      ${
-        photos.length
-          ? `
-            <div class="task-photos">
-
-              <strong>
-                📸 Fotos
-              </strong>
-
-              <div class="photo-grid">
-
-                ${photos.map(
-                  photo => `
-
-                    <a
-                      href="${escapeAttr(
-                        photo
-                      )}"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-
-                      <img
-                        src="${escapeAttr(
-                          photo
-                        )}"
-                        alt="Foto da limpeza"
-                        loading="lazy"
-                      >
-
-                    </a>
-
-                  `
-                ).join('')}
-
-              </div>
-
-            </div>
-          `
-          : ''
-      }
-
-
-      <div class="task-actions">
-
-        <!-- ==================================================
-             CHAT
-        ================================================== -->
-
-        <button
-          class="btn btn-outline"
-          type="button"
-          onclick="openChat('${escapeAttr(
-            task.id
-          )}')"
-        >
-          💬 Chat
-        </button>
-
-
-        ${
-          isCleaner || isAdmin
-            ? `
-
-              ${
-                status !== 'in-progress' &&
-                status !== 'completed'
-                  ? `
-                    <button
-                      class="btn btn-accent"
-                      type="button"
-                      onclick="startTimer('${escapeAttr(
-                        task.id
-                      )}')"
-                    >
-                      ▶️ Iniciar trabalho
-                    </button>
-                  `
-                  : ''
-              }
-
-
-              ${
-                status === 'in-progress' &&
-                !task.work_end
-                  ? `
-                    <button
-                      class="btn btn-outline"
-                      type="button"
-                      onclick="stopTimer('${escapeAttr(
-                        task.id
-                      )}')"
-                    >
-                      ⏹️ Finalizar trabalho
-                    </button>
-                  `
-                  : ''
-              }
-
-
-              ${
-                status === 'in-progress' &&
-                task.work_end
-                  ? `
-                    <button
-                      class="btn btn-accent"
-                      type="button"
-                      onclick="completeTask('${escapeAttr(
-                        task.id
-                      )}')"
-                    >
-                      ✅ Concluir tarefa
-                    </button>
-                  `
-                  : ''
-              }
-
-
-              ${
-                status !== 'completed'
-                  ? `
-                    <label
-                      class="btn btn-outline photo-upload-label"
-                    >
-                      📷 Fotos
-
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        hidden
-                        onchange="
-                          uploadPhotos(
-                            '${escapeAttr(
-                              task.id
-                            )}',
-                            this
-                          )
-                        "
-                      >
-
-                    </label>
-                  `
-                  : ''
-              }
-
-            `
-            : ''
-        }
-
-
-        ${
-          isClient
-            ? `
-
-              ${
-                status === 'pending'
-                  ? `
-
-                    <button
-                      class="btn btn-outline"
-                      type="button"
-                      onclick="toggleEditForm('${escapeAttr(
-                        task.id
-                      )}')"
-                    >
-                      ✏️ Editar
-                    </button>
-
-                    <button
-                      class="btn btn-danger"
-                      type="button"
-                      onclick="cancelRequest('${escapeAttr(
-                        task.id
-                      )}')"
-                    >
-                      🗑️ Cancelar
-                    </button>
-
-                  `
-                  : ''
-              }
-
-            `
-            : ''
-        }
-
-
-        ${
-          isAdmin
-            ? `
-
-              <button
-                class="btn btn-danger"
-                type="button"
-                onclick="adminDeleteTask('${escapeAttr(
-                  task.id
-                )}')"
-              >
-                🗑️ Excluir
-              </button>
-
-            `
-            : ''
-        }
-
-      </div>
-
-
-      ${
-        isClient &&
-        status === 'pending'
-          ? `
-
-            <div
-              class="edit-form"
-              id="editForm_${escapeAttr(
-                task.id
-              )}"
-              style="display:none;"
-            >
-
-              <div class="field-row">
-
-                <div class="field">
-
-                  <label>
-                    Nova data
-                  </label>
-
-                  <input
-                    type="date"
-                    id="editDate_${escapeAttr(
-                      task.id
-                    )}"
-                    value="${escapeAttr(
-                      task.date || ''
-                    )}"
-                  >
-
-                </div>
-
-
-                <div class="field">
-
-                  <label>
-                    Novo horário
-                  </label>
-
-                  <input
-                    type="time"
-                    id="editTime_${escapeAttr(
-                      task.id
-                    )}"
-                    value="${escapeAttr(
-                      task.time || ''
-                    )}"
-                  >
-
-                </div>
-
-              </div>
-
-
-              <button
-                class="btn btn-accent"
-                type="button"
-                onclick="saveEditRequest('${escapeAttr(
-                  task.id
-                )}')"
-              >
-                💾 Salvar alterações
-              </button>
-
-            </div>
-
-          `
-          : ''
-      }
-
-    </div>
-
-  `;
-
-}
-
-
-/* ============================================================
-   CHAT — NÚCLEO
-============================================================ */
-
-/*
-   IMPORTANTE:
-
-   A conversa é encontrada por:
-
-       conversations.task_id
-
-   Nunca por:
-
-       cleaning_id
-       cleaning_request_id
-*/
-
-
-let activeChatConversation = null;
-
-let chatRealtimeChannel = null;
-
-let chatMessagesCallback = null;
-
-
-/* ============================================================
-   ABRIR CHAT
-============================================================ */
-
-function openChat(
-  taskId
-) {
-
-  if (!taskId) {
-
-    showSnackbar(
-      'Não foi possível abrir o chat.'
-    );
-
-    return;
-
-  }
-
-  window.location.href =
-    `chat.html?task=${encodeURIComponent(
-      taskId
-    )}`;
-
-}
-
-
-/* ============================================================
-   OBTER TASK ID DA URL
-============================================================ */
-
-function getChatTaskId() {
-
-  try {
-
-    const params =
-      new URLSearchParams(
-        window.location.search
-      );
-
-    return (
-      params.get('task') ||
-      params.get('task_id') ||
-      ''
-    );
-
-  }
-  catch (error) {
-
-    console.warn(
-      'Erro ao ler task da URL:',
-      error
-    );
-
-    return '';
-
-  }
-
-}
-
-
-/* ============================================================
-   BUSCAR TAREFA
-============================================================ */
-
-async function getTaskById(
-  taskId
+function calculateWorkSeconds(
+  task
 ) {
 
   if (
-    !sb ||
-    !taskId
+    !task?.work_start
   ) {
 
-    return null;
+    return 0;
 
   }
 
-  const {
-    data,
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .select('*')
-    .eq(
-      'id',
-      taskId
-    )
-    .maybeSingle();
 
-  if (error) {
+  const start =
+    new Date(
+      task.work_start
+    ).getTime();
 
-    console.error(
-      'Erro ao buscar tarefa:',
-      error
-    );
-
-    return null;
-
-  }
-
-  return data || null;
-
-}
-
-
-/* ============================================================
-   AUTORIZAÇÃO DO CHAT
-============================================================ */
-
-function isChatParticipant(
-  task,
-  userId,
-  role
-) {
 
   if (
-    !task ||
-    !userId
+    Number.isNaN(start)
   ) {
 
-    return false;
-
-  }
-
-  if (
-    role === 'admin'
-  ) {
-
-    return true;
-
-  }
-
-  return (
-    String(task.client_id || '') ===
-      String(userId) ||
-
-    String(task.professional_id || '') ===
-      String(userId)
-  );
-
-}
-
-
-/* ============================================================
-   OBTER/CRIAR CONVERSA
-============================================================ */
-
-async function getOrCreateConversation(
-  taskId
-) {
-
-  if (
-    !sb ||
-    !taskId
-  ) {
-
-    throw new Error(
-      'Tarefa inválida.'
-    );
-
-  }
-
-  const user =
-    await getCurrentUser();
-
-  if (!user) {
-
-    throw new Error(
-      'Usuário não autenticado.'
-    );
-
-  }
-
-  const task =
-    await getTaskById(
-      taskId
-    );
-
-  if (!task) {
-
-    throw new Error(
-      'Tarefa não encontrada.'
-    );
-
-  }
-
-  const profile =
-    await getCurrentProfile(
-      user.id
-    );
-
-  const role =
-    profile?.role ||
-    '';
-
-  if (
-    !isChatParticipant(
-      task,
-      user.id,
-      role
-    )
-  ) {
-
-    throw new Error(
-      'Você não tem permissão para acessar este chat.'
-    );
+    return 0;
 
   }
 
 
-  /*
-   * Primeiro tenta encontrar
-   * conversa existente.
-   */
-
-  let {
-    data: conversation,
-    error: findError
-  } = await sb
-    .from('conversations')
-    .select('*')
-    .eq(
-      'task_id',
-      taskId
-    )
-    .maybeSingle();
+  const end =
+    task.work_end
+      ? new Date(
+          task.work_end
+        ).getTime()
+      : Date.now();
 
 
-  if (findError) {
-
-    console.error(
-      'Erro ao procurar conversa:',
-      findError
-    );
-
-    throw findError;
-
-  }
-
-
-  /*
-   * Se não existe, cria.
-   *
-   * O professional_id pode ser
-   * nulo caso a tarefa ainda não
-   * tenha profissional.
-   */
-
-  if (!conversation) {
-
-    const payload = {
-
-      task_id:
-        task.id,
-
-      client_id:
-        task.client_id,
-
-      professional_id:
-        task.professional_id || null
-
-    };
-
-
-    const {
-      data: created,
-      error: createError
-    } = await sb
-      .from('conversations')
-      .insert(
-        payload
+  const seconds =
+    Math.max(
+      0,
+      Math.floor(
+        (end - start) / 1000
       )
-      .select('*')
-      .single();
-
-
-    if (
-      createError
-    ) {
-
-      /*
-       * Se outra aba/usuário criou
-       * simultaneamente, tenta buscar
-       * novamente.
-       */
-
-      const {
-        data: existingAfterConflict
-      } = await sb
-        .from('conversations')
-        .select('*')
-        .eq(
-          'task_id',
-          taskId
-        )
-        .maybeSingle();
-
-
-      if (
-        existingAfterConflict
-      ) {
-
-        conversation =
-          existingAfterConflict;
-
-      }
-      else {
-
-        console.error(
-          'Erro ao criar conversa:',
-          createError
-        );
-
-        throw createError;
-
-      }
-
-    }
-    else {
-
-      conversation =
-        created;
-
-    }
-
-  }
-
-
-  /*
-   * Atualiza participantes caso
-   * a conversa tenha sido criada
-   * antes de um profissional ser
-   * atribuído.
-   */
-
-  if (
-    conversation &&
-    (
-      String(
-        conversation.client_id || ''
-      ) !== String(
-        task.client_id || ''
-      ) ||
-      String(
-        conversation.professional_id || ''
-      ) !== String(
-        task.professional_id || ''
-      )
-    )
-  ) {
-
-    const {
-      data: synchronized,
-      error: syncError
-    } = await sb
-      .from('conversations')
-      .update({
-
-        client_id:
-          task.client_id,
-
-        professional_id:
-          task.professional_id || null,
-
-        updated_at:
-          new Date().toISOString()
-
-      })
-      .eq(
-        'id',
-        conversation.id
-      )
-      .select('*')
-      .single();
-
-    if (!syncError && synchronized) {
-
-      conversation =
-        synchronized;
-
-    }
-
-  }
-
-
-  activeChatConversation =
-    conversation;
-
-  return conversation;
-
-}
-
-
-/* ============================================================
-   BUSCAR CONVERSA EXISTENTE
-============================================================ */
-
-async function getConversationByTaskId(
-  taskId
-) {
-
-  if (
-    !sb ||
-    !taskId
-  ) {
-
-    return null;
-
-  }
-
-  const {
-    data,
-    error
-  } = await sb
-    .from('conversations')
-    .select('*')
-    .eq(
-      'task_id',
-      taskId
-    )
-    .maybeSingle();
-
-  if (error) {
-
-    console.error(
-      'Erro ao buscar conversa:',
-      error
-    );
-
-    return null;
-
-  }
-
-  return data || null;
-
-}
-
-
-/* ============================================================
-   BUSCAR MENSAGENS
-============================================================ */
-
-async function getChatMessages(
-  conversationId,
-  options = {}
-) {
-
-  if (
-    !sb ||
-    !conversationId
-  ) {
-
-    return [];
-
-  }
-
-  const limit =
-    Math.min(
-      Math.max(
-        Number(
-          options.limit || 200
-        ),
-        1
-      ),
-      500
-    );
-
-  let query =
-    sb
-      .from('messages')
-      .select(`
-        id,
-        conversation_id,
-        sender_id,
-        content,
-        created_at
-      `)
-      .eq(
-        'conversation_id',
-        conversationId
-      )
-      .order(
-        'created_at',
-        {
-          ascending: true
-        }
-      )
-      .limit(
-        limit
-      );
-
-
-  if (
-    options.before
-  ) {
-
-    query =
-      query.lt(
-        'created_at',
-        options.before
-      );
-
-  }
-
-
-  const {
-    data,
-    error
-  } = await query;
-
-  if (error) {
-
-    console.error(
-      'Erro ao carregar mensagens:',
-      error
-    );
-
-    throw error;
-
-  }
-
-  return data || [];
-
-}
-
-
-/* ============================================================
-   ENVIAR MENSAGEM
-============================================================ */
-
-async function sendChatMessage(
-  conversationId,
-  content
-) {
-
-  if (
-    !sb ||
-    !conversationId
-  ) {
-
-    throw new Error(
-      'Conversa inválida.'
-    );
-
-  }
-
-  const message =
-    String(
-      content || ''
-    ).trim();
-
-  if (!message) {
-
-    throw new Error(
-      'Digite uma mensagem.'
-    );
-
-  }
-
-  if (
-    message.length >
-    5000
-  ) {
-
-    throw new Error(
-      'A mensagem não pode ultrapassar 5000 caracteres.'
-    );
-
-  }
-
-  const user =
-    await getCurrentUser();
-
-  if (!user) {
-
-    throw new Error(
-      'Usuário não autenticado.'
-    );
-
-  }
-
-
-  /*
-   * Confirma que a conversa
-   * pertence ao usuário.
-   */
-
-  const {
-    data: conversation,
-    error: conversationError
-  } = await sb
-    .from('conversations')
-    .select(`
-      id,
-      task_id,
-      client_id,
-      professional_id
-    `)
-    .eq(
-      'id',
-      conversationId
-    )
-    .maybeSingle();
-
-  if (conversationError) {
-
-    throw conversationError;
-
-  }
-
-  if (!conversation) {
-
-    throw new Error(
-      'Conversa não encontrada.'
-    );
-
-  }
-
-  const profile =
-    await getCurrentProfile(
-      user.id
-    );
-
-  const role =
-    profile?.role ||
-    '';
-
-  if (
-    role !== 'admin' &&
-    String(
-      conversation.client_id || ''
-    ) !== String(
-      user.id
-    ) &&
-    String(
-      conversation.professional_id || ''
-    ) !== String(
-      user.id
-    )
-  ) {
-
-    throw new Error(
-      'Você não tem permissão para enviar mensagens nesta conversa.'
-    );
-
-  }
-
-
-  const {
-    data,
-    error
-  } = await sb
-    .from('messages')
-    .insert({
-
-      conversation_id:
-        conversationId,
-
-      sender_id:
-        user.id,
-
-      content:
-        message
-
-    })
-    .select(`
-      id,
-      conversation_id,
-      sender_id,
-      content,
-      created_at
-    `)
-    .single();
-
-  if (error) {
-
-    console.error(
-      'Erro ao enviar mensagem:',
-      error
-    );
-
-    throw error;
-
-  }
-
-
-  /*
-   * Atualiza timestamp da conversa.
-   */
-
-  await sb
-    .from('conversations')
-    .update({
-
-      updated_at:
-        new Date().toISOString()
-
-    })
-    .eq(
-      'id',
-      conversationId
     );
 
 
-  return data;
-
-}
-
-
-/* ============================================================
-   REALTIME DO CHAT
-============================================================ */
-
-function stopChatRealtime() {
-
-  if (
-    !sb ||
-    !chatRealtimeChannel
-  ) {
-
-    return;
-
-  }
-
-  try {
-
-    sb.removeChannel(
-      chatRealtimeChannel
-    );
-
-  }
-  catch (error) {
-
-    console.warn(
-      'Erro ao remover realtime do chat:',
-      error
-    );
-
-  }
-
-  chatRealtimeChannel =
-    null;
-
-}
-
-
-function startChatRealtime(
-  conversationId,
-  callback
-) {
-
-  stopChatRealtime();
-
-  if (
-    !sb ||
-    !conversationId
-  ) {
-
-    return null;
-
-  }
-
-  chatMessagesCallback =
-    typeof callback === 'function'
-      ? callback
-      : null;
-
-
-  chatRealtimeChannel =
-    sb
-      .channel(
-        'cleansync-chat-' +
-        conversationId +
-        '-' +
-        Date.now()
-      )
-
-      .on(
-
-        'postgres_changes',
-
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter:
-            `conversation_id=eq.${conversationId}`
-        },
-
-        payload => {
-
-          try {
-
-            if (
-              typeof chatMessagesCallback ===
-              'function'
-            ) {
-
-              chatMessagesCallback(
-                payload
-              );
-
-            }
-
-          }
-          catch (error) {
-
-            console.error(
-              'Chat realtime callback:',
-              error
-            );
-
-          }
-
-        }
-
-      )
-
-      .subscribe(
-        status => {
-
-          console.log(
-            'CleanSync chat realtime:',
-            status
-          );
-
-        }
-      );
-
-
-  return chatRealtimeChannel;
-
-}
-
-
-/* ============================================================
-   INICIALIZAR CHAT
-============================================================ */
-
-async function initChat(
-  taskId,
-  callbacks = {}
-) {
-
-  try {
-
-    if (!taskId) {
-
-      throw new Error(
-        'Nenhuma tarefa foi informada.'
-      );
-
-    }
-
-    const conversation =
-      await getOrCreateConversation(
-        taskId
-      );
-
-    const messages =
-      await getChatMessages(
-        conversation.id
-      );
-
-
-    /*
-     * Realtime
-     */
-
-    startChatRealtime(
-      conversation.id,
-      payload => {
-
-        if (
-          typeof callbacks.onMessage ===
-          'function'
-        ) {
-
-          callbacks.onMessage(
-            payload.new
-          );
-
-        }
-
-      }
-    );
-
-
-    if (
-      typeof callbacks.onReady ===
-      'function'
-    ) {
-
-      callbacks.onReady({
-
-        taskId,
-
-        conversation,
-
-        messages
-
-      });
-
-    }
-
-
-    return {
-
-      taskId,
-
-      conversation,
-
-      messages
-
-    };
-
-  }
-  catch (error) {
-
-    console.error(
-      'Erro ao inicializar chat:',
-      error
-    );
-
-
-    if (
-      typeof callbacks.onError ===
-      'function'
-    ) {
-
-      callbacks.onError(
-        error
-      );
-
-    }
-
-
-    return null;
-
-  }
-
-}
-
-
-/* ============================================================
-   DESTRUIR CHAT
-============================================================ */
-
-function destroyChat() {
-
-  stopChatRealtime();
-
-  activeChatConversation =
-    null;
-
-  chatMessagesCallback =
-    null;
-
-}
-
-
-/* ============================================================
-   REALTIME GLOBAL
-============================================================ */
-
-let realtimeChannel = null;
-
-
-function stopRealtime() {
-
-  if (
-    sb &&
-    realtimeChannel
-  ) {
-
-    try {
-
-      sb.removeChannel(
-        realtimeChannel
-      );
-
-    }
-    catch (error) {
-
-      console.warn(
-        'Erro ao remover realtime:',
-        error
-      );
-
-    }
-
-  }
-
-  realtimeChannel =
-    null;
-
-}
-
-
-function startRealtime(
-  callback
-) {
-
-  if (!sb) {
-
-    return null;
-
-  }
-
-  stopRealtime();
-
-
-  realtimeChannel =
-    sb
-      .channel(
-        'cleansync-global-' +
-        Date.now()
-      )
-
-
-      /*
-       * Tarefas
-       */
-
-      .on(
-
-        'postgres_changes',
-
-        {
-          event: '*',
-          schema: 'public',
-          table: 'cleaning_requests'
-        },
-
-        payload => {
-
-          try {
-
-            if (
-              typeof callback ===
-              'function'
-            ) {
-
-              callback(
-                payload
-              );
-
-            }
-
-          }
-          catch (error) {
-
-            console.error(
-              'Realtime task callback:',
-              error
-            );
-
-          }
-
-        }
-
-      )
-
-
-      /*
-       * Conversas
-       */
-
-      .on(
-
-        'postgres_changes',
-
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations'
-        },
-
-        payload => {
-
-          try {
-
-            if (
-              typeof callback ===
-              'function'
-            ) {
-
-              callback({
-
-                ...payload,
-
-                table:
-                  'conversations'
-
-              });
-
-            }
-
-          }
-          catch (error) {
-
-            console.error(
-              'Realtime conversation callback:',
-              error
-            );
-
-          }
-
-        }
-
-      )
-
-
-      /*
-       * Mensagens
-       *
-       * Escuta mensagens globalmente.
-       * A autorização continua sendo
-       * feita pelas policies do Supabase.
-       */
-
-      .on(
-
-        'postgres_changes',
-
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages'
-        },
-
-        payload => {
-
-          try {
-
-            if (
-              typeof callback ===
-              'function'
-            ) {
-
-              callback({
-
-                ...payload,
-
-                table:
-                  'messages'
-
-              });
-
-            }
-
-          }
-          catch (error) {
-
-            console.error(
-              'Realtime message callback:',
-              error
-            );
-
-          }
-
-        }
-
-      )
-
-
-      .subscribe(
-        status => {
-
-          console.log(
-            'CleanSync realtime:',
-            status
-          );
-
-        }
-      );
-
-
-  return realtimeChannel;
-
-}
-
-
-/* ============================================================
-   ADMIN — EXCLUIR TAREFA
-============================================================ */
-
-async function adminDeleteTask(
-  id
-) {
-
-  if (!id) {
-
-    return;
-
-  }
-
-  const confirmed =
-    confirm(
-      'Tem certeza que deseja excluir esta tarefa?\n\n' +
-      'A tarefa e os dados relacionados ao chat poderão ser removidos.\n' +
-      'Esta ação não poderá ser desfeita.'
-    );
-
-  if (!confirmed) {
-
-    return;
-
-  }
-
-  if (!sb) {
-
-    alert(
-      'Supabase não configurado.'
-    );
-
-    return;
-
-  }
-
-
-  /*
-   * Primeiro procura conversa.
-   */
-
-  let conversation = null;
-
-  try {
-
-    conversation =
-      await getConversationByTaskId(
-        id
-      );
-
-  }
-  catch (error) {
-
-    console.warn(
-      'Não foi possível localizar conversa:',
-      error
-    );
-
-  }
-
-
-  /*
-   * Exclui mensagens primeiro.
-   */
-
-  if (conversation?.id) {
-
-    const {
-      error: messagesError
-    } = await sb
-      .from('messages')
-      .delete()
-      .eq(
-        'conversation_id',
-        conversation.id
-      );
-
-    if (messagesError) {
-
-      console.warn(
-        'Não foi possível excluir mensagens:',
-        messagesError
-      );
-
-    }
-
-
-    /*
-     * Depois exclui conversa.
-     */
-
-    const {
-      error: conversationError
-    } = await sb
-      .from('conversations')
-      .delete()
-      .eq(
-        'id',
-        conversation.id
-      );
-
-    if (conversationError) {
-
-      console.warn(
-        'Não foi possível excluir conversa:',
-        conversationError
-      );
-
-    }
-
-  }
-
-
-  /*
-   * Finalmente exclui tarefa.
-   */
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .delete()
-    .eq(
-      'id',
-      id
-    );
-
-
-  if (error) {
-
-    console.error(
-      error
-    );
-
-    alert(
-      'Erro ao excluir tarefa:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-
-  showSnackbar(
-    '🗑️ Tarefa excluída.'
-  );
-
-
-  if (
-    typeof window.reloadTasks ===
-    'function'
-  ) {
-
-    window.reloadTasks();
-
-  }
-  else if (
-    typeof window.reloadRequests ===
-    'function'
-  ) {
-
-    window.reloadRequests();
-
-  }
-
-}
-
-
-/* ============================================================
-   EDITAR TAREFA
-============================================================ */
-
-async function updateTask(
-  id,
-  fields
-) {
-
-  if (
-    !sb ||
-    !id
-  ) {
-
-    return {
-
-      error:
-        new Error(
-          'Dados inválidos.'
-        )
-
-    };
-
-  }
-
-  return await sb
-    .from('cleaning_requests')
-    .update(
-      fields
-    )
-    .eq(
-      'id',
-      id
-    );
-
-}
-
-
-/* ============================================================
-   CANCELAR REQUISIÇÃO
-============================================================ */
-
-/*
-   ALTERAÇÃO DEFINITIVA:
-
-   Antes:
-   DELETE da tarefa.
-
-   Agora:
-   status = cancelled
-
-   Assim:
-   - mantém histórico;
-   - mantém referências;
-   - não quebra o chat;
-   - não perde dados administrativos.
-*/
-
-async function cancelRequest(
-  id
-) {
-
-  if (!id) {
-
-    return;
-
-  }
-
-  const confirmed =
-    confirm(
-      'Tem certeza que deseja cancelar esta requisição?'
-    );
-
-  if (!confirmed) {
-
-    return;
-
-  }
-
-  if (!sb) {
-
-    alert(
-      'Supabase não configurado.'
-    );
-
-    return;
-
-  }
-
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .update({
-
-      status:
-        'cancelled'
-
-    })
-    .eq(
-      'id',
-      id
-    );
-
-
-  if (error) {
-
-    alert(
-      'Erro ao cancelar:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-
-  showSnackbar(
-    '🗑️ Requisição cancelada.'
-  );
-
-
-  if (
-    typeof window.reloadRequests ===
-    'function'
-  ) {
-
-    window.reloadRequests();
-
-  }
-  else if (
-    typeof window.reloadTasks ===
-    'function'
-  ) {
-
-    window.reloadTasks();
-
-  }
-
-}
-
-
-/* ============================================================
-   EDIT FORM
-============================================================ */
-
-function toggleEditForm(
-  id
-) {
-
-  const form =
-    document.getElementById(
-      'editForm_' + id
-    );
-
-  if (!form) {
-
-    return;
-
-  }
-
-  if (
-    form.style.display === 'none' ||
-    !form.style.display
-  ) {
-
-    form.style.display =
-      'block';
-
-  }
-  else {
-
-    form.style.display =
-      'none';
-
-  }
-
-}
-
-
-async function saveEditRequest(
-  id
-) {
-
-  const dateInput =
-    document.getElementById(
-      'editDate_' + id
-    );
-
-  const timeInput =
-    document.getElementById(
-      'editTime_' + id
-    );
-
-  if (
-    !dateInput ||
-    !timeInput
-  ) {
-
-    return;
-
-  }
-
-  const newDate =
-    dateInput.value;
-
-  const newTime =
-    timeInput.value;
-
-  if (
-    !newDate ||
-    !newTime
-  ) {
-
-    alert(
-      'Preencha data e horário.'
-    );
-
-    return;
-
-  }
-
-  if (!sb) {
-
-    alert(
-      'Supabase não configurado.'
-    );
-
-    return;
-
-  }
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .update({
-
-      date:
-        newDate,
-
-      time:
-        newTime
-
-    })
-    .eq(
-      'id',
-      id
-    );
-
-  if (error) {
-
-    alert(
-      'Erro:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-  showSnackbar(
-    '✅ Requisição atualizada!'
-  );
-
-  if (
-    typeof window.reloadRequests ===
-    'function'
-  ) {
-
-    window.reloadRequests();
-
-  }
-
-}
-
-
-/* ============================================================
-   CRONÔMETRO
-============================================================ */
-
-let timerInterval = null;
-
-
-function attachTimers(
-  tasks = []
-) {
-
-  clearInterval(
-    timerInterval
-  );
-
-  function updateTimers() {
-
-    document
-      .querySelectorAll(
-        '.live-timer'
-      )
-      .forEach(
-        element => {
-
-          const start =
-            element.dataset.start;
-
-          const end =
-            element.dataset.end;
-
-          if (!start) {
-
-            element.textContent =
-              '00:00:00';
-
-            return;
-
-          }
-
-          const startDate =
-            new Date(
-              start
-            );
-
-          const endDate =
-            end
-              ? new Date(end)
-              : new Date();
-
-          let seconds =
-            Math.floor(
-              (
-                endDate.getTime() -
-                startDate.getTime()
-              ) / 1000
-            );
-
-          if (
-            !Number.isFinite(
-              seconds
-            ) ||
-            seconds < 0
-          ) {
-
-            seconds = 0;
-
-          }
-
-          element.textContent =
-            formatDuration(
-              seconds
-            );
-
-        }
-      );
-
-  }
-
-  updateTimers();
-
-  timerInterval =
-    setInterval(
-      updateTimers,
-      1000
-    );
+  return seconds;
 
 }
 
@@ -3383,1056 +946,944 @@ function formatDuration(
   const seconds =
     Math.max(
       0,
-      Math.floor(
-        totalSeconds
-      )
+      Number(totalSeconds) || 0
     );
+
 
   const h =
     Math.floor(
       seconds / 3600
     );
 
+
   const m =
     Math.floor(
-      (
-        seconds % 3600
-      ) / 60
+      (seconds % 3600) / 60
     );
+
 
   const s =
     seconds % 60;
 
-  return [
 
-    String(h).padStart(
-      2,
-      '0'
-    ),
+  if (h > 0) {
 
-    String(m).padStart(
-      2,
-      '0'
-    ),
-
-    String(s).padStart(
-      2,
-      '0'
-    )
-
-  ].join(':');
-
-}
-
-
-/* ============================================================
-   INICIAR TRABALHO
-============================================================ */
-
-async function startTimer(
-  id
-) {
-
-  if (!id) {
-
-    return;
+    return (
+      String(h).padStart(2, "0") +
+      ":" +
+      String(m).padStart(2, "0") +
+      ":" +
+      String(s).padStart(2, "0")
+    );
 
   }
 
-  if (!sb) {
 
-    alert(
-      'Supabase não configurado.'
-    );
-
-    return;
-
-  }
-
-  const {
-    data: existing,
-    error: fetchError
-  } = await sb
-    .from('cleaning_requests')
-    .select(
-      'status, work_start, work_end'
-    )
-    .eq(
-      'id',
-      id
-    )
-    .single();
-
-  if (fetchError) {
-
-    alert(
-      'Erro ao carregar tarefa:\n' +
-      fetchError.message
-    );
-
-    return;
-
-  }
-
-  if (
-    existing &&
-    existing.status ===
-      'completed'
-  ) {
-
-    showSnackbar(
-      'Esta tarefa já foi concluída.'
-    );
-
-    return;
-
-  }
-
-  if (
-    existing &&
-    existing.work_start &&
-    !existing.work_end
-  ) {
-
-    showSnackbar(
-      'O cronômetro já está em andamento.'
-    );
-
-    return;
-
-  }
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .update({
-
-      status:
-        'in-progress',
-
-      work_start:
-        new Date().toISOString(),
-
-      work_end:
-        null
-
-    })
-    .eq(
-      'id',
-      id
-    );
-
-  if (error) {
-
-    alert(
-      'Erro ao iniciar:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-  showSnackbar(
-    '⏱️ Trabalho iniciado!'
+  return (
+    String(m).padStart(2, "0") +
+    ":" +
+    String(s).padStart(2, "0")
   );
 
-  if (
-    typeof window.reloadTasks ===
-    'function'
-  ) {
-
-    window.reloadTasks();
-
-  }
-  else {
-
-    location.reload();
-
-  }
-
 }
 
 
-/* ============================================================
-   FINALIZAR CRONÔMETRO
-============================================================ */
+window.calculateWorkSeconds =
+  calculateWorkSeconds;
 
-async function stopTimer(
-  id
-) {
-
-  if (!id) {
-
-    return;
-
-  }
-
-  if (!sb) {
-
-    alert(
-      'Supabase não configurado.'
-    );
-
-    return;
-
-  }
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .update({
-
-      work_end:
-        new Date().toISOString()
-
-    })
-    .eq(
-      'id',
-      id
-    );
-
-  if (error) {
-
-    alert(
-      'Erro ao finalizar:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-  showSnackbar(
-    '⏹️ Trabalho finalizado!'
-  );
-
-  if (
-    typeof window.reloadTasks ===
-    'function'
-  ) {
-
-    window.reloadTasks();
-
-  }
-  else {
-
-    location.reload();
-
-  }
-
-}
+window.formatDuration =
+  formatDuration;
 
 
 /* ============================================================
-   CHECKLIST
+   18. ATTACH TIMERS
 ============================================================ */
 
-async function toggleChecklistItem(
-  id,
-  itemId
+function attachTimers(
+  tasks
 ) {
 
   if (
-    !id ||
-    !itemId ||
-    !sb
+    !Array.isArray(tasks)
   ) {
 
     return;
 
   }
 
-  const {
-    data: row,
-    error: fetchError
-  } = await sb
-    .from('cleaning_requests')
-    .select(
-      'checklist'
-    )
-    .eq(
-      'id',
-      id
-    )
-    .single();
 
-  if (fetchError) {
+  const update =
+    () => {
 
-    console.error(
-      fetchError
-    );
+      tasks.forEach(
+        task => {
 
-    showSnackbar(
-      'Erro ao carregar checklist.'
-    );
+          const element =
+            document.querySelector(
+              `[data-timer-id="${escapeAttribute(task.id)}"]`
+            );
 
-    return;
 
-  }
+          if (!element) return;
 
-  const checklist =
-    normalizeChecklist(
-      row?.checklist
-    );
 
-  const updated =
-    checklist.map(
-      item => {
+          const seconds =
+            calculateWorkSeconds(
+              task
+            );
 
-        if (
-          String(item.id) ===
-          String(itemId)
-        ) {
 
-          return {
-
-            ...item,
-
-            done:
-              !item.done
-
-          };
+          element.textContent =
+            formatDuration(
+              seconds
+            );
 
         }
-
-        return item;
-
-      }
-    );
-
-  const {
-    error
-  } = await sb
-    .from('cleaning_requests')
-    .update({
-
-      checklist:
-        updated
-
-    })
-    .eq(
-      'id',
-      id
-    );
-
-  if (error) {
-
-    console.error(
-      error
-    );
-
-    showSnackbar(
-      'Erro ao atualizar checklist.'
-    );
-
-    if (
-      typeof window.reloadTasks ===
-      'function'
-    ) {
-
-      window.reloadTasks();
-
-    }
-
-    return;
-
-  }
-
-  const checkbox =
-    document.getElementById(
-      `ck_${itemId}_${id}`
-    );
-
-  if (checkbox) {
-
-    const itemDiv =
-      checkbox.closest(
-        '.checklist-item'
       );
 
-    if (itemDiv) {
+    };
 
-      itemDiv.classList.toggle(
-        'done',
-        checkbox.checked
-      );
 
-    }
+  update();
 
-    const task =
-      checkbox.closest(
-        '.task'
-      );
 
-    if (task) {
+  clearInterval(
+    window.__cleanSyncTimerInterval
+  );
 
-      const boxes =
-        task.querySelectorAll(
-          '.checklist-item input[type="checkbox"]'
-        );
 
-      const done =
-        task.querySelectorAll(
-          '.checklist-item input[type="checkbox"]:checked'
-        ).length;
-
-      const progress =
-        task.querySelector(
-          '.checklist-progress'
-        );
-
-      if (progress) {
-
-        progress.textContent =
-          `${done} / ${boxes.length} concluídos`;
-
-      }
-
-    }
-
-  }
+  window.__cleanSyncTimerInterval =
+    setInterval(
+      update,
+      1000
+    );
 
 }
 
 
+window.attachTimers =
+  attachTimers;
+
+
 /* ============================================================
-   CONCLUIR TAREFA
+   19. CHAT
+   BOTÃO AUTOMÁTICO DOS CARDS
 ============================================================ */
 
-async function completeTask(
-  id
+function getChatUrl(
+  taskId
 ) {
 
-  if (
-    !id ||
-    !sb
-  ) {
+  if (!taskId) {
 
-    return;
+    return "chat.html";
 
   }
 
-  try {
 
-    const {
-      data: task,
-      error: fetchError
-    } = await sb
-      .from('cleaning_requests')
-      .select('*')
-      .eq(
-        'id',
-        id
-      )
-      .single();
-
-    if (fetchError) {
-
-      throw fetchError;
-
-    }
-
-    if (!task) {
-
-      throw new Error(
-        'Tarefa não encontrada.'
-      );
-
-    }
-
-    const checklist =
-      normalizeChecklist(
-        task.checklist
-      );
-
-    const allDone =
-      checklist.length === 0 ||
-      checklist.every(
-        item => item.done
-      );
-
-    if (!allDone) {
-
-      const continueAnyway =
-        confirm(
-          'Alguns itens do checklist ainda não foram concluídos.\n\n' +
-          'Deseja concluir a tarefa mesmo assim?'
-        );
-
-      if (!continueAnyway) {
-
-        return;
-
-      }
-
-    }
-
-    if (
-      !task.work_start ||
-      !task.work_end
-    ) {
-
-      alert(
-        'Use o cronômetro antes de concluir a tarefa.\n\n' +
-        'Inicie o trabalho e depois finalize o cronômetro.'
-      );
-
-      return;
-
-    }
-
-    const {
-      data: updatedTask,
-      error: updateError
-    } = await sb
-      .from('cleaning_requests')
-      .update({
-
-        status:
-          'completed',
-
-        completed_at:
-          new Date().toISOString()
-
-      })
-      .eq(
-        'id',
-        id
-      )
-      .select()
-      .single();
-
-    if (updateError) {
-
-      throw updateError;
-
-    }
-
-    showSnackbar(
-      '✅ Tarefa concluída!'
-    );
-
-    if (
-      typeof window.reloadTasks ===
-      'function'
-    ) {
-
-      window.reloadTasks();
-
-    }
-
-    await notifyTaskCompleted(
-      updatedTask
-    );
-
-  }
-  catch (error) {
-
-    console.error(
-      'Erro ao concluir:',
-      error
-    );
-
-    alert(
-      'Erro ao concluir tarefa:\n' +
-      (
-        error.message ||
-        error
-      )
-    );
-
-  }
+  return (
+    "chat.html?task=" +
+    encodeURIComponent(
+      taskId
+    )
+  );
 
 }
 
 
+window.getChatUrl =
+  getChatUrl;
+
+
 /* ============================================================
-   NOTIFICAÇÃO
+   20. CHAT BUTTON
 ============================================================ */
 
-async function notifyTaskCompleted(
+function renderChatButton(
   task
 ) {
 
-  if (
-    !task ||
-    !sb
-  ) {
+  if (!task?.id) {
 
-    return;
+    return "";
 
   }
 
-  try {
 
-    const {
-      data,
-      error
-    } = await sb.auth.getSession();
+  return `
 
-    if (
-      error ||
-      !data?.session
-    ) {
+    <a
+      href="${escapeAttribute(
+        getChatUrl(task.id)
+      )}"
+      class="btn btn-outline chat-task-button"
+      title="Abrir conversa desta limpeza"
+      aria-label="Abrir chat desta limpeza"
+    >
+      💬 Chat
+    </a>
 
-      console.warn(
-        'Sessão não disponível para notificação.'
-      );
-
-      return;
-
-    }
-
-    const supabaseUrl =
-      window.SUPABASE_URL ||
-      SUPABASE_URL;
-
-    if (
-      !supabaseUrl ||
-      supabaseUrl.includes(
-        'COLOQUE_AQUI'
-      )
-    ) {
-
-      console.warn(
-        'SUPABASE_URL não configurada.'
-      );
-
-      return;
-
-    }
-
-    const response =
-      await fetch(
-        `${supabaseUrl}/functions/v1/notify-task-completed`,
-        {
-
-          method:
-            'POST',
-
-          headers: {
-
-            'Content-Type':
-              'application/json',
-
-            'Authorization':
-              `Bearer ${data.session.access_token}`
-
-          },
-
-          body:
-            JSON.stringify({
-
-              taskId:
-                task.id
-
-            })
-
-        }
-      );
-
-    const result =
-      await response
-        .json()
-        .catch(
-          () => ({})
-        );
-
-    if (!response.ok) {
-
-      console.warn(
-        'Notificação não enviada:',
-        result
-      );
-
-      return;
-
-    }
-
-    console.log(
-      'Notificação processada:',
-      result
-    );
-
-  }
-  catch (error) {
-
-    console.warn(
-      'Falha na notificação:',
-      error
-    );
-
-  }
+  `;
 
 }
 
 
-/* ============================================================
-   FOTOS
-============================================================ */
-
-async function uploadPhotos(
-  id,
-  input
-) {
-
-  if (
-    !id ||
-    !input ||
-    !sb
-  ) {
-
-    return;
-
-  }
-
-  const files =
-    Array.from(
-      input.files || []
-    );
-
-  if (!files.length) {
-
-    return;
-
-  }
-
-  showSnackbar(
-    '📤 Enviando fotos...'
-  );
-
-  try {
-
-    const uploadedUrls = [];
-
-    for (
-      const file of files
-    ) {
-
-      if (
-        file.size >
-        15 * 1024 * 1024
-      ) {
-
-        throw new Error(
-          `${file.name} é maior que 15 MB.`
-        );
-
-      }
-
-      if (
-        !file.type.startsWith(
-          'image/'
-        )
-      ) {
-
-        throw new Error(
-          `${file.name} não é uma imagem válida.`
-        );
-
-      }
-
-      const safeName =
-        file.name
-          .replace(
-            /[^a-zA-Z0-9.\-_]/g,
-            '_'
-          );
-
-      const path =
-        `${id}/${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}-${safeName}`;
-
-      const {
-        error: uploadError
-      } = await sb.storage
-        .from(
-          CLEANING_PHOTOS_BUCKET
-        )
-        .upload(
-          path,
-          file,
-          {
-            upsert: false
-          }
-        );
-
-      if (uploadError) {
-
-        throw uploadError;
-
-      }
-
-      const {
-        data
-      } = sb.storage
-        .from(
-          CLEANING_PHOTOS_BUCKET
-        )
-        .getPublicUrl(
-          path
-        );
-
-      if (
-        data?.publicUrl
-      ) {
-
-        uploadedUrls.push(
-          data.publicUrl
-        );
-
-      }
-
-    }
-
-    if (!uploadedUrls.length) {
-
-      throw new Error(
-        'Nenhuma foto foi enviada.'
-      );
-
-    }
-
-    const {
-      data: row,
-      error: fetchError
-    } = await sb
-      .from('cleaning_requests')
-      .select(
-        'photos'
-      )
-      .eq(
-        'id',
-        id
-      )
-      .single();
-
-    if (fetchError) {
-
-      throw fetchError;
-
-    }
-
-    const existingPhotos =
-      Array.isArray(
-        row?.photos
-      )
-        ? row.photos
-        : [];
-
-    const allPhotos = [
-
-      ...existingPhotos,
-
-      ...uploadedUrls
-
-    ];
-
-    const {
-      error: updateError
-    } = await sb
-      .from('cleaning_requests')
-      .update({
-
-        photos:
-          allPhotos
-
-      })
-      .eq(
-        'id',
-        id
-      );
-
-    if (updateError) {
-
-      throw updateError;
-
-    }
-
-    input.value = '';
-
-    showSnackbar(
-      '📸 Fotos enviadas!'
-    );
-
-    if (
-      typeof window.reloadTasks ===
-      'function'
-    ) {
-
-      window.reloadTasks();
-
-    }
-
-  }
-  catch (error) {
-
-    console.error(
-      error
-    );
-
-    alert(
-      'Erro ao enviar fotos:\n' +
-      error.message
-    );
-
-  }
-
-}
+window.renderChatButton =
+  renderChatButton;
 
 
 /* ============================================================
-   CHECKLIST ADMIN
+   21. RENDER TASK CARD
 ============================================================ */
 
-async function updateChecklistItemLabel(
-  itemId,
-  newLabel
+function renderTaskCard(
+  task,
+  mode = "client"
 ) {
 
-  const label =
-    String(
-      newLabel || ''
-    ).trim();
+  if (!task) {
 
-  if (!label) {
-
-    showSnackbar(
-      'O nome da tarefa não pode ficar vazio.'
-    );
-
-    return;
+    return "";
 
   }
 
-  const items =
-    await getDefaultChecklist();
 
-  const updated =
-    items.map(
-      item =>
-        String(item.id) ===
-        String(itemId)
-          ? {
-              ...item,
-              label
+  const role =
+    normalizeRole(
+      mode
+    );
+
+
+  const isClient =
+    role === "cliente" ||
+    mode === "client";
+
+
+  const isAdmin =
+    role === "admin" ||
+    mode === "admin";
+
+
+  const isCleaner =
+    role === "profissional" ||
+    mode === "cleaner" ||
+    mode === "professional";
+
+
+  const checklist =
+    normalizeChecklist(
+      task.checklist
+    );
+
+
+  const doneCount =
+    checklist.filter(
+      item => item.done
+    ).length;
+
+
+  const checklistTotal =
+    checklist.length;
+
+
+  const checklistPercent =
+    checklistTotal > 0
+      ? Math.round(
+          (
+            doneCount /
+            checklistTotal
+          ) * 100
+        )
+      : 0;
+
+
+  const laundry =
+    Boolean(
+      task.laundry_service
+    );
+
+
+  const price =
+    Number(
+      task.price ??
+      (
+        laundry
+          ? PRICE_WITH_LAUNDRY
+          : PRICE_BASE
+      )
+    );
+
+
+  const status =
+    task.status ||
+    "pending";
+
+
+  const taskId =
+    task.id;
+
+
+  const ref =
+    task.ref_code ||
+    (
+      taskId
+        ? String(taskId).slice(0, 8)
+        : "—"
+    );
+
+
+  const clientName =
+    task.client_name ||
+    task.client_email ||
+    "Cliente";
+
+
+  const address =
+    task.address ||
+    "Endereço não informado";
+
+
+  const date =
+    formatTaskDate(
+      task.date,
+      task.time
+    );
+
+
+  const notes =
+    task.notes ||
+    "";
+
+
+  const photos =
+    Array.isArray(task.photos)
+      ? task.photos
+      : [];
+
+
+  let html = `
+
+    <article
+      class="task card"
+      data-task-id="${escapeAttribute(taskId)}"
+    >
+
+      <div class="task-head">
+
+        <div>
+
+          <div class="task-ref">
+            #${escapeHtml(ref)}
+          </div>
+
+          <h3 class="task-title">
+            ${escapeHtml(
+              clientName
+            )}
+          </h3>
+
+        </div>
+
+
+        <div
+          class="status status-${escapeAttribute(status)}"
+        >
+          ${escapeHtml(
+            formatStatus(status)
+          )}
+        </div>
+
+      </div>
+
+
+      <div class="task-meta">
+
+        <div class="task-meta-item">
+
+          <span>
+            DATA
+          </span>
+
+          <strong>
+            ${date}
+          </strong>
+
+        </div>
+
+
+        <div class="task-meta-item">
+
+          <span>
+            ENDEREÇO
+          </span>
+
+          <strong>
+            ${escapeHtml(address)}
+          </strong>
+
+        </div>
+
+
+        <div class="task-meta-item">
+
+          <span>
+            HÓSPEDES
+          </span>
+
+          <strong>
+            ${escapeHtml(
+              task.guest_count ??
+              "—"
+            )}
+          </strong>
+
+        </div>
+
+
+        <div class="task-meta-item">
+
+          <span>
+            ESTADIA
+          </span>
+
+          <strong>
+            ${escapeHtml(
+              task.stay_duration ??
+              "—"
+            )}
+            ${task.stay_duration ? " dias" : ""}
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <div class="task-price-row">
+
+        <div>
+
+          <span class="task-label">
+            SERVIÇO
+          </span>
+
+          <strong>
+            Limpeza
+            ${
+              laundry
+                ? " + Lavagem"
+                : ""
             }
-          : item
-    );
+          </strong>
 
-  const {
-    error
-  } = await sb
-    .from('default_checklist')
-    .update({
-
-      items:
-        updated,
-
-      updated_at:
-        new Date().toISOString()
-
-    })
-    .eq(
-      'id',
-      1
-    );
-
-  if (error) {
-
-    alert(
-      'Erro:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-  showSnackbar(
-    '✅ Checklist atualizado.'
-  );
-
-}
+        </div>
 
 
-async function addChecklistItem() {
+        <div class="task-price">
 
-  const items =
-    await getDefaultChecklist();
+          ${price}
+          <small>CHF</small>
 
-  items.push({
+        </div>
 
-    id:
-      'item_' +
-      Date.now(),
+      </div>
 
-    label:
-      'Nova tarefa'
+  `;
 
-  });
 
-  const {
-    error
-  } = await sb
-    .from('default_checklist')
-    .update({
-
-      items,
-
-      updated_at:
-        new Date().toISOString()
-
-    })
-    .eq(
-      'id',
-      1
-    );
-
-  if (error) {
-
-    alert(
-      'Erro:\n' +
-      error.message
-    );
-
-    return;
-
-  }
-
-  showSnackbar(
-    '✅ Item adicionado.'
-  );
+  /* ==========================================================
+     CHECKLIST
+  ========================================================== */
 
   if (
-    typeof window.loadChecklistEditor ===
-    'function'
+    checklistTotal > 0
   ) {
 
-    window.loadChecklistEditor();
+    html += `
+
+      <div class="checklist-section">
+
+        <div class="checklist-header">
+
+          <span>
+            Checklist
+          </span>
+
+          <span
+            class="checklist-progress"
+          >
+            ${doneCount} / ${checklistTotal}
+            concluídos
+          </span>
+
+        </div>
+
+
+        <div
+          class="checklist-bar"
+          aria-hidden="true"
+        >
+
+          <div
+            class="checklist-fill"
+            style="width:${checklistPercent}%"
+          ></div>
+
+        </div>
+
+
+        <div class="checklist-list">
+
+          ${checklist
+            .map(
+              item => {
+
+                const done =
+                  Boolean(
+                    item.done
+                  );
+
+
+                const checkboxId =
+                  "ck_" +
+                  String(item.id) +
+                  "_" +
+                  String(taskId);
+
+
+                return `
+
+                  <label
+                    class="checklist-item ${
+                      done
+                        ? "done"
+                        : ""
+                    }"
+                  >
+
+                    <input
+                      type="checkbox"
+                      id="${escapeAttribute(
+                        checkboxId
+                      )}"
+                      ${
+                        done
+                          ? "checked"
+                          : ""
+                      }
+                      ${
+                        isCleaner || isAdmin
+                          ? `onclick="toggleChecklistItem('${escapeAttribute(taskId)}','${escapeAttribute(item.id)}')"`
+                          : "disabled"
+                      }
+                    >
+
+                    <span>
+                      ${escapeHtml(
+                        item.label
+                      )}
+                    </span>
+
+                  </label>
+
+                `;
+
+              }
+            )
+            .join("")}
+
+        </div>
+
+      </div>
+
+    `;
 
   }
-  else {
 
-    location.reload();
+
+  /* ==========================================================
+     OBSERVAÇÕES
+  ========================================================== */
+
+  if (notes) {
+
+    html += `
+
+      <div class="task-notes">
+
+        <span>
+          OBSERVAÇÕES
+        </span>
+
+        <p>
+          ${escapeHtml(notes)}
+        </p>
+
+      </div>
+
+    `;
 
   }
+
+
+  /* ==========================================================
+     CRONÔMETRO
+  ========================================================== */
+
+  if (
+    isCleaner ||
+    isAdmin
+  ) {
+
+    html += `
+
+      <div class="task-timer">
+
+        <div>
+
+          <span>
+            TEMPO DE TRABALHO
+          </span>
+
+          <strong
+            data-timer-id="${escapeAttribute(taskId)}"
+          >
+            ${formatDuration(
+              calculateWorkSeconds(task)
+            )}
+          </strong>
+
+        </div>
+
+
+        ${
+          task.work_start &&
+          !task.work_end
+            ? `
+              <span class="timer-live">
+                ● CONTANDO
+              </span>
+            `
+            : ""
+        }
+
+      </div>
+
+    `;
+
+  }
+
+
+  /* ==========================================================
+     FOTOS
+  ========================================================== */
+
+  if (
+    photos.length > 0
+  ) {
+
+    html += `
+
+      <div class="task-photos">
+
+        <div class="task-label">
+          FOTOS
+        </div>
+
+        <div class="photo-grid">
+
+          ${photos
+            .map(
+              photo => `
+
+                <a
+                  href="${escapeAttribute(photo)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+
+                  <img
+                    src="${escapeAttribute(photo)}"
+                    alt="Foto da limpeza"
+                    loading="lazy"
+                  >
+
+                </a>
+
+              `
+            )
+            .join("")}
+
+        </div>
+
+      </div>
+
+    `;
+
+  }
+
+
+  /* ==========================================================
+     AÇÕES
+  ========================================================== */
+
+  html += `
+
+    <div class="task-actions">
+
+      ${renderChatButton(task)}
+
+  `;
+
+
+  /* ==========================================================
+     CLIENTE
+  ========================================================== */
+
+  if (
+    isClient
+  ) {
+
+    if (
+      status === "pending"
+    ) {
+
+      html += `
+
+        <button
+          type="button"
+          class="btn btn-outline"
+          onclick="toggleEditForm('${escapeAttribute(taskId)}')"
+        >
+          ✏️ Editar
+        </button>
+
+
+        <button
+          type="button"
+          class="btn btn-danger"
+          onclick="cancelRequest('${escapeAttribute(taskId)}')"
+        >
+          🗑️ Cancelar
+        </button>
+
+      `;
+
+    }
+
+
+    html += `
+
+      <div
+        class="edit-form"
+        id="editForm_${escapeAttribute(taskId)}"
+        style="display:none;"
+      >
+
+        <div class="field-row">
+
+          <div class="field">
+
+            <label>
+              Nova data
+            </label>
+
+            <input
+              type="date"
+              id="editDate_${escapeAttribute(taskId)}"
+              value="${escapeAttribute(task.date || "")}"
+            >
+
+          </div>
+
+
+          <div class="field">
+
+            <label>
+              Novo horário
+            </label>
+
+            <input
+              type="time"
+              id="editTime_${escapeAttribute(taskId)}"
+              value="${escapeAttribute(task.time || "")}"
+            >
+
+          </div>
+
+        </div>
+
+
+        <button
+          type="button"
+          class="btn btn-accent"
+          onclick="saveEditRequest('${escapeAttribute(taskId)}')"
+        >
+          Salvar alteração
+        </button>
+
+      </div>
+
+    `;
+
+  }
+
+
+  /* ==========================================================
+     PROFISSIONAL / ADMIN
+  ========================================================== */
+
+  if (
+    isCleaner ||
+    isAdmin
+  ) {
+
+    if (
+      status === "pending"
+    ) {
+
+      html += `
+
+        <button
+          type="button"
+          class="btn btn-accent"
+          onclick="startTimer('${escapeAttribute(taskId)}')"
+        >
+          ▶️ Iniciar trabalho
+        </button>
+
+      `;
+
+    }
+
+
+    if (
+      status === "in-progress"
+    ) {
+
+      html += `
+
+        <button
+          type="button"
+          class="btn btn-outline"
+          onclick="stopTimer('${escapeAttribute(taskId)}')"
+        >
+          ⏹️ Finalizar trabalho
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-accent"
+          onclick="completeTask('${escapeAttribute(taskId)}')"
+        >
+          ✅ Concluir tarefa
+        </button>
+
+      `;
+
+    }
+
+
+    if (
+      status === "completed"
+    ) {
+
+      html += `
+
+        <span
+          class="task-completed-label"
+        >
+          ✓ Serviço concluído
+        </span>
+
+      `;
+
+    }
+
+
+    html += `
+
+      <label
+        class="btn btn-outline photo-upload-button"
+      >
+
+        📸 Fotos
+
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onchange="uploadPhotos(
+            '${escapeAttribute(taskId)}',
+            this
+          )"
+        >
+
+      </label>
+
+    `;
+
+  }
+
+
+  /* ==========================================================
+     ADMIN
+  ========================================================== */
+
+  if (
+    isAdmin
+  ) {
+
+    html += `
+
+      <button
+        type="button"
+        class="btn btn-danger"
+        onclick="deleteTask('${escapeAttribute(taskId)}')"
+      >
+        🗑️ Excluir
+      </button>
+
+    `;
+
+  }
+
+
+  html += `
+
+    </div>
+
+  </article>
+
+  `;
+
+
+  return html;
 
 }
 
 
-async function removeChecklistItem(
-  itemId
+window.renderTaskCard =
+  renderTaskCard;
+
+
+/* ============================================================
+   22. DELETE TASK — ADMIN
+============================================================ */
+
+async function deleteTask(
+  id
 ) {
+
+  if (!id) return;
+
 
   const confirmed =
     confirm(
-      'Remover este item do checklist padrão?'
+      "Tem certeza que deseja excluir esta tarefa?\n\nEssa ação não poderá ser desfeita."
     );
+
 
   if (!confirmed) {
 
@@ -4440,393 +1891,426 @@ async function removeChecklistItem(
 
   }
 
-  const items =
-    (
-      await getDefaultChecklist()
-    ).filter(
-      item =>
-        String(item.id) !==
-        String(itemId)
-    );
 
-  const {
-    error
-  } = await sb
-    .from('default_checklist')
-    .update({
-
-      items,
-
-      updated_at:
-        new Date().toISOString()
-
-    })
-    .eq(
-      'id',
-      1
-    );
-
-  if (error) {
+  if (!sb) {
 
     alert(
-      'Erro:\n' +
+      "Supabase não está disponível."
+    );
+
+    return;
+
+  }
+
+
+  try {
+
+    const {
+      error
+    } =
+      await sb
+        .from("cleaning_requests")
+        .delete()
+        .eq("id", id);
+
+
+    if (error) {
+
+      throw error;
+
+    }
+
+
+    showSnackbar(
+      "🗑️ Tarefa excluída."
+    );
+
+
+    if (
+      typeof window.reloadTasks ===
+      "function"
+    ) {
+
+      window.reloadTasks();
+
+    }
+
+
+    if (
+      typeof window.reloadRequests ===
+      "function"
+    ) {
+
+      window.reloadRequests();
+
+    }
+
+  }
+
+  catch (error) {
+
+    console.error(
+      "deleteTask:",
+      error
+    );
+
+
+    alert(
+      "Erro ao excluir tarefa: " +
       error.message
     );
 
-    return;
-
-  }
-
-  showSnackbar(
-    '🗑️ Item removido.'
-  );
-
-  if (
-    typeof window.loadChecklistEditor ===
-    'function'
-  ) {
-
-    window.loadChecklistEditor();
-
-  }
-  else {
-
-    location.reload();
-
   }
 
 }
 
 
+window.deleteTask =
+  deleteTask;
+
+
 /* ============================================================
-   PWA
+   23. REALTIME CLEANING REQUESTS
 ============================================================ */
 
-let deferredInstallPrompt =
+let cleanSyncRealtimeChannel =
   null;
 
 
-window.addEventListener(
-  'beforeinstallprompt',
-  event => {
+function startRealtime(
+  callback
+) {
 
-    event.preventDefault();
+  if (!sb) {
 
-    deferredInstallPrompt =
-      event;
+    console.warn(
+      "Realtime: Supabase não inicializado."
+    );
+
+    return null;
 
   }
-);
 
 
-function setupInstallAndNotifyBanner() {
+  if (
+    cleanSyncRealtimeChannel
+  ) {
 
-  window.CleanSync.installApp =
-    async function () {
+    try {
 
-      if (!deferredInstallPrompt) {
-
-        showSnackbar(
-          'A instalação não está disponível neste momento.'
-        );
-
-        return;
-
-      }
-
-      deferredInstallPrompt.prompt();
-
-      const result =
-        await deferredInstallPrompt.userChoice;
-
-      console.log(
-        'PWA install:',
-        result
+      sb.removeChannel(
+        cleanSyncRealtimeChannel
       );
 
-      deferredInstallPrompt =
-        null;
+    }
 
-    };
+    catch {}
+
+    cleanSyncRealtimeChannel =
+      null;
+
+  }
+
+
+  const channelName =
+    "cleansync-cleaning-requests-" +
+    Date.now();
+
+
+  cleanSyncRealtimeChannel =
+    sb
+      .channel(channelName)
+
+
+      .on(
+
+        "postgres_changes",
+
+        {
+          event: "*",
+          schema: "public",
+          table: "cleaning_requests"
+        },
+
+        payload => {
+
+          console.log(
+            "CleanSync Realtime:",
+            payload
+          );
+
+
+          if (
+            typeof callback ===
+            "function"
+          ) {
+
+            callback(
+              payload
+            );
+
+          }
+
+        }
+
+      )
+
+
+      .subscribe(
+        status => {
+
+          console.log(
+            "CleanSync Realtime status:",
+            status
+          );
+
+        }
+      );
+
+
+  return cleanSyncRealtimeChannel;
 
 }
 
 
+window.startRealtime =
+  startRealtime;
+
+
 /* ============================================================
-   SERVICE WORKER
+   24. STOP REALTIME
 ============================================================ */
 
-function registerCleanSyncServiceWorker() {
+function stopRealtime() {
 
   if (
-    !('serviceWorker' in navigator)
+    !sb ||
+    !cleanSyncRealtimeChannel
   ) {
 
     return;
 
   }
 
-  navigator.serviceWorker
-    .register(
-      'service-worker.js'
-    )
-    .then(
-      registration => {
 
-        console.log(
-          'CleanSync Service Worker:',
-          registration.scope
-        );
+  try {
 
-      }
-    )
-    .catch(
-      error => {
-
-        console.warn(
-          'Service Worker:',
-          error
-        );
-
-      }
+    sb.removeChannel(
+      cleanSyncRealtimeChannel
     );
+
+  }
+
+  catch {}
+
+  cleanSyncRealtimeChannel =
+    null;
+
+}
+
+
+window.stopRealtime =
+  stopRealtime;
+
+
+/* ============================================================
+   25. AUTH STATE
+============================================================ */
+
+if (sb) {
+
+  sb.auth.onAuthStateChange(
+    (
+      event,
+      session
+    ) => {
+
+      console.log(
+        "CleanSync Auth:",
+        event
+      );
+
+
+      if (
+        event === "SIGNED_OUT"
+      ) {
+
+        if (
+          !window.location.pathname.endsWith(
+            "index.html"
+          ) &&
+          !window.location.pathname.endsWith(
+            "/"
+          )
+        ) {
+
+          window.location.href =
+            "index.html";
+
+        }
+
+      }
+
+    }
+  );
 
 }
 
 
 /* ============================================================
-   AUTO-INICIALIZAÇÃO
+   26. INSTALL / NOTIFICATION BANNER
 ============================================================ */
 
-document.addEventListener(
-  'DOMContentLoaded',
-  () => {
+function setupInstallAndNotifyBanner() {
 
-    setupInstallAndNotifyBanner();
+  /*
+   * Não força instalação.
+   * Apenas deixa o sistema preparado.
+   */
 
-  }
-);
+  let deferredPrompt = null;
+
+
+  window.addEventListener(
+    "beforeinstallprompt",
+    event => {
+
+      event.preventDefault();
+
+      deferredPrompt =
+        event;
+
+
+      window.__cleanSyncInstallPrompt =
+        deferredPrompt;
+
+    }
+  );
+
+
+  window.addEventListener(
+    "appinstalled",
+    () => {
+
+      deferredPrompt =
+        null;
+
+      window.__cleanSyncInstallPrompt =
+        null;
+
+    }
+  );
+
+}
+
+
+window.setupInstallAndNotifyBanner =
+  setupInstallAndNotifyBanner;
 
 
 /* ============================================================
-   LIMPEZA AO SAIR DA PÁGINA
+   27. SERVICE WORKER
+============================================================ */
+
+if (
+  "serviceWorker" in navigator
+) {
+
+  window.addEventListener(
+    "load",
+    () => {
+
+      navigator.serviceWorker
+        .register(
+          "service-worker.js"
+        )
+        .then(
+          registration => {
+
+            console.log(
+              "CleanSync Service Worker:",
+              registration.scope
+            );
+
+          }
+        )
+        .catch(
+          error => {
+
+            console.warn(
+              "Service Worker:",
+              error
+            );
+
+          }
+        );
+
+    }
+  );
+
+}
+
+
+/* ============================================================
+   28. CLEANUP
 ============================================================ */
 
 window.addEventListener(
-  'pagehide',
+  "beforeunload",
   () => {
 
-    /*
-     * Não remove o realtime global
-     * de forma agressiva em todas as
-     * páginas, mas encerra o chat.
-     */
+    if (
+      cleanSyncRealtimeChannel &&
+      sb
+    ) {
 
-    stopChatRealtime();
+      try {
+
+        sb.removeChannel(
+          cleanSyncRealtimeChannel
+        );
+
+      }
+
+      catch {}
+
+    }
+
+
+    if (
+      window.__cleanSyncTimerInterval
+    ) {
+
+      clearInterval(
+        window.__cleanSyncTimerInterval
+      );
+
+    }
 
   }
 );
 
 
 /* ============================================================
-   EXPORTAÇÃO GLOBAL
-============================================================ */
-
-Object.assign(
-  window,
-  {
-
-    /*
-     * Supabase
-     */
-
-    sb,
-
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY,
-
-
-    /*
-     * Configuração
-     */
-
-    PRICE_BASE,
-    PRICE_WITH_LAUNDRY,
-
-
-    /*
-     * Helpers
-     */
-
-    debounce,
-    escapeHtml,
-    escapeAttr,
-
-    formatDate,
-    formatTime,
-    formatCHF,
-    formatDuration,
-
-
-    /*
-     * Snackbar
-     */
-
-    showSnackbar,
-
-
-    /*
-     * Sessão
-     */
-
-    getSession,
-    saveSession,
-    clearSession,
-
-
-    /*
-     * Usuário/perfil
-     */
-
-    getCurrentUser,
-    getCurrentProfile,
-    getProfileName,
-
-
-    /*
-     * Autenticação
-     */
-
-    requireRole,
-    logout,
-
-
-    /*
-     * Checklist
-     */
-
-    getDefaultChecklist,
-    normalizeChecklist,
-    getChecklistProgress,
-
-    getStatusLabel,
-    getStatusClass,
-
-
-    /*
-     * Cards
-     */
-
-    renderTaskCard,
-
-
-    /*
-     * Tarefas
-     */
-
-    getTaskById,
-    updateTask,
-
-
-    /*
-     * Chat
-     */
-
-    openChat,
-    getChatTaskId,
-
-    getConversationByTaskId,
-    getOrCreateConversation,
-
-    getChatMessages,
-    sendChatMessage,
-
-    startChatRealtime,
-    stopChatRealtime,
-
-    initChat,
-    destroyChat,
-
-
-    /*
-     * Realtime
-     */
-
-    startRealtime,
-    stopRealtime,
-
-
-    /*
-     * Cronômetro
-     */
-
-    attachTimers,
-
-    startTimer,
-    stopTimer,
-    completeTask,
-
-
-    /*
-     * Checklist
-     */
-
-    toggleChecklistItem,
-
-
-    /*
-     * Fotos
-     */
-
-    uploadPhotos,
-
-
-    /*
-     * Cliente
-     */
-
-    toggleEditForm,
-    saveEditRequest,
-    cancelRequest,
-
-
-    /*
-     * Admin
-     */
-
-    adminDeleteTask,
-
-    updateChecklistItemLabel,
-    addChecklistItem,
-    removeChecklistItem,
-
-
-    /*
-     * Notificação
-     */
-
-    notifyTaskCompleted,
-
-
-    /*
-     * PWA
-     */
-
-    setupInstallAndNotifyBanner,
-    registerCleanSyncServiceWorker
-
-  }
-);
-
-
-/* ============================================================
-   LOG FINAL
+   29. DEBUG
 ============================================================ */
 
 console.log(
-  'CleanSync app-common DEFINITIVO carregado.'
+  "%cCleanSync App Common carregado",
+  "font-weight:bold"
 );
 
 console.log(
-  'Chat: conversations.task_id → messages.conversation_id'
+  "Chat:",
+  "chat.html?task=ID"
+);
+
+console.log(
+  "Tabela de conversas:",
+  "conversations.task_id"
+);
+
+console.log(
+  "Tabela de mensagens:",
+  "messages.conversation_id"
 );
