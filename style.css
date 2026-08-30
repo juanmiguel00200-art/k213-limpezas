@@ -471,3 +471,37 @@ details.card summary span:last-child{ font-family:var(--mono); text-transform:no
 @media (min-width:901px){
   .mobile-side-nav{ display:none; }
 }
+
+/* ============================================================
+   Chat por tarefa (cliente ↔ profissional/admin)
+   ============================================================ */
+.chat-badge{
+  display:inline-block; background:var(--pink); color:#fff; font-size:10px; font-weight:800;
+  border-radius:999px; min-width:16px; height:16px; line-height:16px; text-align:center;
+  padding:0 4px; margin-left:4px; vertical-align:middle;
+}
+.chat-box{
+  margin-top:16px; padding-top:16px; border-top:1px dashed var(--border-strong);
+  animation:notifyFade .2s ease;
+}
+.chat-messages{
+  max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;
+  background:var(--dark2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:14px; margin-bottom:10px;
+}
+.chat-bubble{
+  max-width:80%; align-self:flex-start; background:var(--dark4); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:8px 12px;
+}
+.chat-bubble.mine{
+  align-self:flex-end; background:linear-gradient(135deg,var(--wine),var(--pink)); border-color:transparent;
+}
+.chat-bubble-meta{ font-size:10px; color:var(--muted); margin-bottom:3px; font-family:var(--mono); letter-spacing:.03em; }
+.chat-bubble.mine .chat-bubble-meta{ color:rgba(255,255,255,.75); }
+.chat-bubble-content{ font-size:13.5px; color:var(--cream); line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+.chat-input-row{ display:flex; gap:8px; }
+.chat-input-row input{
+  flex:1; padding:10px 12px; border:1.5px solid var(--border-strong); border-radius:var(--radius-sm);
+  background:var(--dark2); color:var(--cream); font-family:var(--sans); font-size:13.5px;
+}
+.chat-input-row input:focus{ outline:none; border-color:var(--pink); }
