@@ -6,9 +6,11 @@
 <title>CleanSync · Administração</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="ai-widget.css?v=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
   window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -22,6 +24,8 @@
 </script>
 </head>
 <body>
+
+<div id="snackbar" class="snackbar"></div>
 
 <div class="topbar">
   <a href="admin.html" class="brand">
@@ -46,16 +50,29 @@
     <h1>Gerenciar usuários</h1>
     <p class="lede">Veja quem tem conta, exclua contas de teste ou resete a senha de qualquer pessoa.</p>
     <p class="lede" style="margin-top:6px; color:var(--pink-light);">Quer excluir tarefas ou editar valores? Isso fica na aba <a href="profissional.html" style="color:inherit; text-decoration:underline;">Tarefas</a>, que como admin mostra todas as requisições com botões extras.</p>
-    <button class="btn btn-outline" style="margin-top:16px;" onclick="askAIResumoTarefas()">🤖 Pedir resumo das últimas limpezas ao assistente</button>
+    <button class="btn btn-outline" style="margin-top:16px;" onclick="alert('Funcionalidade em breve!')">🤖 Pedir resumo das últimas limpezas ao assistente</button>
   </div>
 
   <div class="stats-grid" id="adminStatsGrid"></div>
 
   <div class="section-label">Todos os usuários</div>
   <div id="usersList"><div class="spinner"></div></div>
+
+  <!-- Badge Cloudflare Edição Limitada -->
+  <div class="cf-footer-badge">
+    <a class="cf-badge cf-badge-lg" href="https://www.cloudflare.com" target="_blank" rel="noopener">
+      <svg class="cf-logo" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M34.5 28.5c.3-.9.4-1.8.4-2.8 0-4.6-3.7-8.3-8.3-8.3-3.4 0-6.3 2-7.6 4.9-1.1-1-2.5-1.6-4.1-1.6-3.4 0-6.2 2.8-6.2 6.2 0 .4 0 .8.1 1.2-2.6.9-4.5 3.4-4.5 6.3 0 3.7 3 6.7 6.7 6.7h22.4c3.3 0 6-2.7 6-6 0-2.9-2-5.3-4.6-5.9z" fill="#F38020"/>
+        <path d="M34.5 28.5c.3-.9.4-1.8.4-2.8 0-4.6-3.7-8.3-8.3-8.3-3.4 0-6.3 2-7.6 4.9-1.1-1-2.5-1.6-4.1-1.6-3.4 0-6.2 2.8-6.2 6.2 0 .4 0 .8.1 1.2-2.6.9-4.5 3.4-4.5 6.3 0 3.7 3 6.7 6.7 6.7h22.4c3.3 0 6-2.7 6-6 0-2.9-2-5.3-4.6-5.9z" fill="#FAAE40" opacity="0.3"/>
+      </svg>
+      <span>Powered by <strong>Cloudflare</strong></span>
+      <span class="cf-limited">· Edição Limitada</span>
+    </a>
+    <div class="cf-tagline">Protegido por Turnstile · Hospedado em Cloudflare Pages</div>
+  </div>
 </div>
 
-<script src="app-common.js?v=15"></script>
+<script src="app-common.js?v=16"></script>
 <script>
 let ctx;
 (async () => {
@@ -63,7 +80,6 @@ let ctx;
   if (!ctx) return;
   loadUsers();
   if (typeof setupInstallAndNotifyBanner === 'function') setupInstallAndNotifyBanner();
-  if (typeof setupAIWidget === 'function') setupAIWidget();
 })();
 
 async function loadUsers(){
@@ -126,7 +142,6 @@ async function resetarSenha(id, username){
   let novaSenha = '';
   for (let i = 0; i < 12; i++) novaSenha += chars[Math.floor(Math.random() * chars.length)];
   const novoHash = await sha256Hex(novaSenha);
-
   const session = getSession();
   const { error } = await sb.rpc('k213_admin_resetar_senha', {
     p_admin_username: session.username,
