@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#15151A">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=12">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
 <script>
@@ -26,68 +26,138 @@
 
 <div id="snackbar" class="snackbar"></div>
 
-<div class="topbar">
-  <div class="brand">
-    <div class="mark"></div>
-    <div><div class="name">CleanSync</div><div class="sub">PAINEL DO CLIENTE</div></div>
-  </div>
-  <div class="who">
-    <span class="sync-dot"><span class="dot"></span>SINCRONIZADO</span>
-    <span id="topWhoName"></span>
-    <button class="btn btn-ghost" onclick="logout()">Sair</button>
+<div class="app-shell">
+
+  <aside class="side">
+    <a href="#" class="brand">
+      <div class="mark"></div>
+      <div><div class="name" style="font-size:19px;">CleanSync</div><div class="sub">CLIENTE</div></div>
+    </a>
+
+    <div class="sync-dot" style="padding:0 6px 18px;"><span class="dot"></span>SINCRONIZADO</div>
+
+    <div class="side-label">Menu</div>
+    <nav class="side-nav">
+      <button class="side-link active" data-view="geral" onclick="showView('geral')">🏠 Visão geral</button>
+      <button class="side-link" data-view="nova" onclick="showView('nova')">➕ Nova requisição</button>
+      <button class="side-link" data-view="tarefas" onclick="showView('tarefas')">🧾 Minhas tarefas</button>
+    </nav>
+
+    <div class="side-bottom">
+      <div class="side-who" id="topWhoName"></div>
+      <button class="btn btn-ghost" style="width:100%;" onclick="logout()">Sair</button>
+    </div>
+  </aside>
+
+  <div class="main-area">
+
+    <header class="area-top">
+      <div class="crumbs">CleanSync <i>/</i> <span id="crumbText">Visão geral</span></div>
+    </header>
+
+    <main class="wrap" style="padding-top:28px;">
+
+      <!-- ===================== VISÃO GERAL ===================== -->
+      <section class="view active" id="view-geral">
+
+        <div class="page-hero" style="padding:0 0 24px;">
+          <div class="eyebrow">Painel do cliente</div>
+          <h1 id="greetH1">Suas limpezas, sincronizadas.</h1>
+          <p class="lede">Acompanhe o status das suas requisições em tempo real.</p>
+        </div>
+
+        <div class="stats-grid" id="clientStatsGrid"></div>
+
+        <div class="dash-grid">
+
+          <div>
+            <div class="card" id="nextServiceCard">
+              <div class="section-label">Próximo serviço</div>
+              <div id="nextServiceBody"><p class="empty" style="padding:24px;">Carregando…</p></div>
+            </div>
+
+            <div class="card">
+              <div class="section-label">Últimas requisições</div>
+              <div id="recentRequests"><p class="empty" style="padding:24px;">Carregando…</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-label">Status da próxima requisição</div>
+            <div id="timelineBody" class="timeline"></div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ===================== NOVA REQUISIÇÃO ===================== -->
+      <section class="view" id="view-nova">
+
+        <div class="page-hero" style="padding:0 0 24px;">
+          <div class="eyebrow">Coordenação de limpeza</div>
+          <h1>Nova requisição</h1>
+          <p class="lede">Preencha os detalhes e crie sua requisição.</p>
+        </div>
+
+        <div class="card">
+          <form id="cleaningRequestForm">
+            <div class="field-row">
+              <div class="field"><label>Data</label><input type="date" id="cleaningDate" required /></div>
+              <div class="field"><label>Horário</label><input type="time" id="cleaningTime" required /></div>
+            </div>
+            <div class="field"><label>Endereço</label><input type="text" id="propertyAddress" placeholder="Digite o endereço completo" required /></div>
+            <div class="field-row">
+              <div class="field"><label>Duração da estadia (dias)</label><input type="number" id="stayDuration" min="1" required /></div>
+              <div class="field"><label>Nº de hóspedes</label><input type="number" id="guestCount" min="1" required /></div>
+            </div>
+            <div class="field price-field">
+              <div class="laundry-check">
+                <input type="checkbox" id="laundryService" onchange="updatePrice()" />
+                <label for="laundryService">🧺 Lavagem de roupa (opcional)</label>
+              </div>
+              <div class="price-box">
+                <div class="base">Base 40 CHF · com lavagem 50 CHF</div>
+                <div class="total"><span id="priceDisplay">40</span> <span class="chf">CHF</span></div>
+              </div>
+            </div>
+            <div class="field"><label>Observações</label><textarea id="specialNotes" rows="3" placeholder="Opcional"></textarea></div>
+            <button type="submit" class="btn btn-accent">Criar requisição</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ===================== MINHAS TAREFAS ===================== -->
+      <section class="view" id="view-tarefas">
+
+        <div class="page-hero" style="padding:0 0 24px;">
+          <div class="eyebrow">Coordenação de limpeza</div>
+          <h1>Minhas requisições</h1>
+          <p class="lede">Todo o histórico, com status em tempo real.</p>
+        </div>
+
+        <div class="filter-bar">
+          <span class="flabel">Status</span>
+          <select id="clientFilterStatus">
+            <option value="all">Todos</option>
+            <option value="pending">Pendentes</option>
+            <option value="in-progress">Em andamento</option>
+            <option value="completed">Concluídas</option>
+          </select>
+        </div>
+        <div id="clientRequests"></div>
+      </section>
+
+    </main>
   </div>
 </div>
 
-<div class="wrap">
-  <div class="page-hero">
-    <div class="eyebrow">COORDENAÇÃO DE LIMPEZA</div>
-    <h1>Suas requisições de limpeza</h1>
-    <p class="lede">Crie uma nova requisição e acompanhe o status em tempo real.</p>
-  </div>
+<nav class="mobile-side-nav">
+  <button class="active" data-view="geral" onclick="showView('geral')">🏠 Início</button>
+  <button data-view="nova" onclick="showView('nova')">➕ Nova</button>
+  <button data-view="tarefas" onclick="showView('tarefas')">🧾 Tarefas</button>
+</nav>
 
-  <div class="card">
-    <div class="section-label">Nova requisição</div>
-    <form id="cleaningRequestForm">
-      <div class="field-row">
-        <div class="field"><label>Data</label><input type="date" id="cleaningDate" required /></div>
-        <div class="field"><label>Horário</label><input type="time" id="cleaningTime" required /></div>
-      </div>
-      <div class="field"><label>Endereço</label><input type="text" id="propertyAddress" placeholder="Digite o endereço completo" required /></div>
-      <div class="field-row">
-        <div class="field"><label>Duração da estadia (dias)</label><input type="number" id="stayDuration" min="1" required /></div>
-        <div class="field"><label>Nº de hóspedes</label><input type="number" id="guestCount" min="1" required /></div>
-      </div>
-      <div class="field price-field">
-        <div class="laundry-check">
-          <input type="checkbox" id="laundryService" onchange="updatePrice()" />
-          <label for="laundryService">🧺 Lavagem de roupa (opcional)</label>
-        </div>
-        <div class="price-box">
-          <div class="base">Base 40 CHF · com lavagem 50 CHF</div>
-          <div class="total"><span id="priceDisplay">40</span> <span class="chf">CHF</span></div>
-        </div>
-      </div>
-      <div class="field"><label>Observações</label><textarea id="specialNotes" rows="3" placeholder="Opcional"></textarea></div>
-      <button type="submit" class="btn btn-accent">Criar requisição</button>
-    </form>
-  </div>
-
-  <div class="stats-grid" id="clientStatsGrid"></div>
-
-  <div class="section-label">Minhas requisições</div>
-  <div class="filter-bar">
-    <span class="flabel">Status</span>
-    <select id="clientFilterStatus">
-      <option value="all">Todos</option>
-      <option value="pending">Pendentes</option>
-      <option value="in-progress">Em andamento</option>
-      <option value="completed">Concluídas</option>
-    </select>
-  </div>
-  <div id="clientRequests"></div>
-</div>
-
-<script src="app-common.js?v=10"></script>
+<script src="app-common.js?v=12"></script>
 <script>
 let currentUser = null;
 let currentProfile = null;
@@ -170,6 +240,74 @@ async function loadClientRequests(){
   container.dataset.loaded = '1';
   attachTimers(requests);
   renderClientStats(requests, filter);
+
+  // a visão geral usa sempre a lista completa (sem filtro), então busca à parte
+  loadOverview();
+}
+
+/* ---------- visão geral: próximo serviço + timeline + recentes ---------- */
+async function loadOverview(){
+  const { data: all, error } = await sb.from('cleaning_requests').select('*').eq('client_id', currentUser.id).order('created_at', { ascending: false });
+  if (error || !all) return;
+
+  renderClientStats(all, 'all');
+
+  // "próximo serviço" = tarefa não concluída mais próxima (por data/hora)
+  const pendentes = all.filter(r => r.status !== 'completed')
+    .sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`));
+  const next = pendentes[0];
+
+  const nextBody = document.getElementById('nextServiceBody');
+  const timelineBody = document.getElementById('timelineBody');
+
+  if (!next) {
+    nextBody.innerHTML = '<p class="empty" style="padding:24px;">Nenhum serviço pendente. Que tal criar uma nova requisição? 🧹</p>';
+    timelineBody.innerHTML = '<p class="empty" style="padding:24px;">—</p>';
+  } else {
+    const dataFmt = (next.date || '').split('-').reverse().join('/');
+    nextBody.innerHTML = `
+      <div class="info-item" style="margin-bottom:14px;"><div class="label">Endereço</div><div class="value">${escapeHtml(next.address)}</div></div>
+      <div class="task-info">
+        <div class="info-item"><div class="label">Data</div><div class="value">${dataFmt}</div></div>
+        <div class="info-item"><div class="label">Horário</div><div class="value">${next.time}</div></div>
+        <div class="info-item"><div class="label">Valor</div><div class="value">${next.price} CHF</div></div>
+        <div class="info-item"><div class="label">Status</div><div class="value">${statusLabel(next.status)}</div></div>
+      </div>`;
+    timelineBody.innerHTML = buildTimeline(next.status);
+  }
+
+  // últimas 3 requisições, versão compacta
+  const recentEl = document.getElementById('recentRequests');
+  if (!all.length) {
+    recentEl.innerHTML = '<p class="empty" style="padding:24px;">Nenhuma requisição ainda.</p>';
+  } else {
+    recentEl.innerHTML = all.slice(0, 3).map(req => renderTaskCard(req, 'preview')).join('');
+  }
+}
+
+function buildTimeline(status){
+  const steps = [
+    { label: 'Requisição criada', sub: 'Registrada no sistema', done: true },
+    { label: 'Aguardando início', sub: status === 'pending' ? 'Em andamento' : 'Concluída', done: status !== 'pending', current: status === 'pending' },
+    { label: 'Em andamento', sub: status === 'in-progress' ? 'Profissional trabalhando agora' : (status === 'completed' ? 'Concluída' : 'Aguardando'), done: status === 'completed', current: status === 'in-progress' },
+    { label: 'Concluída', sub: status === 'completed' ? 'Serviço finalizado' : 'Aguardando', done: status === 'completed' },
+  ];
+  return steps.map(s => `
+    <div class="timeline-item ${s.done ? 'done' : ''} ${s.current ? 'current' : ''}">
+      <div class="timeline-line"></div>
+      <div class="timeline-dot"></div>
+      <div class="timeline-text"><strong>${s.label}</strong><span>${s.sub}</span></div>
+    </div>`).join('');
+}
+
+/* ---------- navegação entre as 3 views (sem recarregar página) ---------- */
+const crumbNames = { geral: 'Visão geral', nova: 'Nova requisição', tarefas: 'Minhas tarefas' };
+function showView(view){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+  document.querySelectorAll('.side-link, .mobile-side-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('crumbText').textContent = crumbNames[view] || view;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderClientStats(requests, filter){
